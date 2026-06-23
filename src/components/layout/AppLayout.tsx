@@ -39,7 +39,7 @@ export function AppLayout() {
       <main
         className={`flex-1 overflow-y-auto transition-all duration-300 relative ${
           currentSong ? 'pb-32' : ''
-        } ${sidebarCollapsed && !nowPlayingOpen ? 'ml-16' : !nowPlayingOpen ? 'ml-64' : ''}`}
+        } ${sidebarCollapsed && !nowPlayingOpen ? 'ml-[72px]' : !nowPlayingOpen ? 'ml-64' : ''}`}
       >
         <Suspense
           fallback={

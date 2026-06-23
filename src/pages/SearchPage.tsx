@@ -69,7 +69,7 @@ export default function SearchPage() {
             value={query}
             onChange={(e) => handleInputChange(e.target.value)}
             placeholder="Search songs, albums, artists..."
-            className="w-full rounded-xl border border-white/10 bg-white/5 py-3.5 pl-12 pr-10 text-white placeholder-gray-500 outline-none transition-all focus:border-white/20 focus:bg-white/8"
+            className="w-full rounded-xl border border-white/20 bg-white/10 py-3.5 pl-12 pr-10 text-white placeholder:text-white/50 outline-none transition-all focus:border-white/30 focus:bg-white/20"
           />
           {query && (
             <button

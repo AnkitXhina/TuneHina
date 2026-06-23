@@ -98,12 +98,17 @@ class ThemeEngine {
     const saturated = this.findMostSaturated(palette);
 
     // Primary: most vibrant — push saturation hard, keep lightness mid-range
-    const primaryHsl = this.rgbToHsl(vibrant);
+    const vibrantArray: RGB = Array.isArray(vibrant) ? vibrant : [(vibrant as any).r, (vibrant as any).g, (vibrant as any).b];
+    const primaryHsl = this.rgbToHsl(vibrantArray);
     const primary = this.hslToRgb([
       primaryHsl[0],
-      Math.max(primaryHsl[1], 0.7),         // floor saturation at 70%
-      Math.max(Math.min(primaryHsl[2], 0.55), 0.4),
+      Math.max(primaryHsl[1], 0.7),
+      Math.max(Math.min(primaryHsl[2], 0.70), 0.52), // bright & glowing: 52%–70%
     ]);
+
+    console.log('[ThemeEngine] vibrant RGB:', vibrant);
+    console.log('[ThemeEngine] primary HSL before clamp:', primaryHsl);
+    console.log('[ThemeEngine] primary RGB after clamp:', primary);
 
     // Primary light / dark variants
     const primaryLight = this.adjustBrightness(primary, 0.18);
@@ -126,36 +131,40 @@ class ThemeEngine {
     ]);
 
     // ── Background ───────────────────────────────────────────
-    // Preserve the dominant color's hue exactly.
-    // Theme Contrast Algorithm
-    const domHsl = this.rgbToHsl(dominant);
-    let bgLightness = domHsl[2];
-    let bgSaturation = domHsl[1];
-
-    if (bgLightness < 0.25) {
-      // Lighten dark colors automatically
-      bgLightness = Math.min(bgLightness + 0.15, 0.30);
-    } else if (bgLightness > 0.6) {
-      // Slightly desaturate bright colors to prevent neon overload
-      bgSaturation = Math.max(bgSaturation - 0.15, 0.4);
-      bgLightness = Math.max(bgLightness * 0.45, 0.25);
-    } else {
-      // Increase baseline brightness by 20-30% (was ~0.12-0.22, now ~0.25-0.35)
-      bgLightness = Math.max(Math.min(bgLightness * 0.6, 0.35), 0.25);
-    }
-
+    // Background must always stay very dark
+    const dominantArray: RGB = Array.isArray(dominant) ? dominant : [(dominant as any).r, (dominant as any).g, (dominant as any).b];
+    const bgHsl = this.rgbToHsl(dominantArray);
     const bgClamped = this.hslToRgb([
-      domHsl[0],
-      Math.max(bgSaturation, 0.55), // Floor saturation
-      bgLightness
+      bgHsl[0],
+      Math.min(bgHsl[1], 0.4),  // not too saturated
+      Math.min(bgHsl[2], 0.18), // never brighter than 18% lightness
     ]);
+
+    console.log('[ThemeEngine] dominant RGB:', dominant);
+    console.log('[ThemeEngine] background HSL before clamp:', bgHsl);
+    console.log('[ThemeEngine] background RGB after clamp:', bgClamped);
 
     // Background light: slightly lighter
     const backgroundLight = this.adjustBrightness(bgClamped, 0.06);
 
-    // Surface: lighter still — used for cards, dropdowns
-    const surface = this.adjustBrightness(bgClamped, 0.10);
-    const surfaceLight = this.adjustBrightness(bgClamped, 0.15);
+    // Surface: slightly lighter than background but still very dark
+    const surfaceHsl = this.rgbToHsl(dominantArray);
+    const surface = this.hslToRgb([
+      surfaceHsl[0],
+      Math.min(surfaceHsl[1], 0.35),
+      Math.min(surfaceHsl[2], 0.22), // max 22% lightness
+    ]);
+
+    // Surface light: just a touch lighter
+    const surfaceLightHsl = this.rgbToHsl(dominantArray);
+    const surfaceLight = this.hslToRgb([
+      surfaceLightHsl[0],
+      Math.min(surfaceLightHsl[1], 0.30),
+      Math.min(surfaceLightHsl[2], 0.26), // max 26% lightness
+    ]);
+
+    console.log('[ThemeEngine] surface RGB:', surface);
+    console.log('[ThemeEngine] surfaceLight RGB:', surfaceLight);
 
     // Text colors: ensure readability but keep it simple — white is always safe on these darks
     const text = this.ensureContrast(bgClamped, [255, 255, 255], 4.5);

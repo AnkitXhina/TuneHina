@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Home, Search, Library,
-  Settings, ChevronLeft, ChevronRight, Music2,
+  Settings, Menu,
 } from 'lucide-react';
 import { useUIStore } from '../../stores/uiStore';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -23,27 +23,53 @@ export function Sidebar() {
     <aside
       className={cn(
         'fixed left-0 top-0 z-40 flex h-full flex-col border-r border-white/5 bg-black/20 backdrop-blur-3xl transition-all duration-300',
-        collapsed ? 'w-16' : 'w-64',
+        collapsed ? 'w-[72px]' : 'w-64',
         currentSong ? 'pb-[72px]' : ''
       )}
     >
-      {/* Logo */}
+      {/* Header */}
       <div
         className={cn(
-          'flex h-16 items-center gap-3 border-b border-white/5 px-4 cursor-pointer',
-          collapsed && 'justify-center px-0',
+          'flex h-16 items-center border-b border-white/5 transition-all duration-300 overflow-hidden',
+          collapsed ? 'px-1 gap-1' : 'px-4 gap-3'
         )}
-        onClick={() => navigate('/')}
       >
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-pink-500">
-          <Music2 className="h-4 w-4 text-white" />
-        </div>
-        {!collapsed && (
-          <span className="text-lg font-bold tracking-tight gradient-text">
+        <button
+          onClick={() => setSidebarCollapsed(!collapsed)}
+          className="p-1 hover:bg-white/10 rounded-lg transition-colors flex-shrink-0 text-white/70 hover:text-white"
+          aria-label="Toggle Sidebar"
+        >
+          <Menu className={cn("transition-all duration-300", collapsed ? "h-6 w-6" : "h-5 w-5")} />
+        </button>
+        
+        <div 
+          className="flex items-center gap-3 cursor-pointer overflow-hidden"
+          onClick={() => navigate('/')}
+        >
+          <img
+            src="/icon-transparent.svg"
+            alt="TuneHina"
+            className={cn(
+              "object-contain drop-shadow-lg flex-shrink-0 transition-all duration-300",
+              collapsed ? "h-8 w-8" : "h-[34px] w-[34px]"
+            )}
+          />
+          <span 
+            className={cn(
+              "text-[22px] font-semibold text-white truncate transition-all duration-300",
+              collapsed ? "opacity-0 w-0" : "opacity-100 w-full"
+            )}
+            style={{ 
+              fontFamily: "'Inter', sans-serif", 
+              letterSpacing: '-0.01em',
+              lineHeight: 1
+            }}
+          >
             TuneHina
           </span>
-        )}
+        </div>
       </div>
+
 
       {/* Main Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 no-scrollbar">
@@ -62,7 +88,12 @@ export function Sidebar() {
               }
             >
               <item.icon className="h-5 w-5 flex-shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
+              <span className={cn(
+                "truncate transition-all duration-300",
+                collapsed ? "opacity-0 w-0 hidden" : "opacity-100 w-auto"
+              )}>
+                {item.label}
+              </span>
             </NavLink>
           ))}
         </div>
@@ -70,7 +101,7 @@ export function Sidebar() {
 
       </nav>
 
-      {/* Settings & Collapse */}
+      {/* Settings */}
       <div className="border-t border-white/5 p-2">
         <NavLink
           to="/settings"
@@ -79,22 +110,13 @@ export function Sidebar() {
           }
         >
           <Settings className="h-5 w-5 flex-shrink-0" />
-          {!collapsed && <span>Settings</span>}
+          <span className={cn(
+            "truncate transition-all duration-300",
+            collapsed ? "opacity-0 w-0 hidden" : "opacity-100 w-auto"
+          )}>
+            Settings
+          </span>
         </NavLink>
-
-        <button
-          onClick={() => setSidebarCollapsed(!collapsed)}
-          className={cn('sidebar-item w-full', collapsed && 'justify-center px-0')}
-        >
-          {collapsed ? (
-            <ChevronRight className="h-5 w-5" />
-          ) : (
-            <>
-              <ChevronLeft className="h-5 w-5 flex-shrink-0" />
-              <span>Collapse</span>
-            </>
-          )}
-        </button>
       </div>
     </aside>
   );

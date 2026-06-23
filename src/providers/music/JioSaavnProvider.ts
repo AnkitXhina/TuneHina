@@ -467,10 +467,14 @@ class JioSaavnProvider implements MusicProviderInterface {
         return { songs, albums, playlists };
       }
 
+      const songsData = Array.isArray(data.songs) ? data.songs : (data.songs?.results || []);
+      const albumsData = Array.isArray(data.albums) ? data.albums : (data.albums?.results || []);
+      const playlistsData = Array.isArray(data.playlists) ? data.playlists : (data.playlists?.results || []);
+
       return {
-        songs: Array.isArray(data.songs) ? data.songs.map(normalizeSong) : [],
-        albums: Array.isArray(data.albums) ? data.albums.map(normalizeAlbum) : [],
-        playlists: Array.isArray(data.playlists) ? data.playlists.map(normalizePlaylist) : [],
+        songs: Array.isArray(songsData) ? songsData.map(normalizeSong) : [],
+        albums: Array.isArray(albumsData) ? albumsData.map(normalizeAlbum) : [],
+        playlists: Array.isArray(playlistsData) ? playlistsData.map(normalizePlaylist) : [],
       };
     } catch (error) {
       console.error('[JioSaavn] getTrending failed:', error);
