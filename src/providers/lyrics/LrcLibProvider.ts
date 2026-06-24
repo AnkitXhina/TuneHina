@@ -7,6 +7,18 @@ class LrcLibProvider implements LyricsProviderInterface {
   name = 'lrclib';
   private baseUrl = API_CONFIG.LRCLIB_BASE_URL;
 
+  private async fetchWithRetry(url: string, options: RequestInit, retries = 2): Promise<Response> {
+    try {
+      return await fetch(url, options);
+    } catch (err) {
+      if (retries > 0) {
+        await new Promise(r => setTimeout(r, 1500));
+        return this.fetchWithRetry(url, options, retries - 1);
+      }
+      throw err;
+    }
+  }
+
   async getLyrics(
     songName: string,
     artistName: string,
@@ -21,7 +33,7 @@ class LrcLibProvider implements LyricsProviderInterface {
       if (albumName) params.set('album_name', albumName);
       if (duration) params.set('duration', String(Math.round(duration)));
 
-      const response = await fetch(`${this.baseUrl}/api/get?${params.toString()}`, {
+      const response = await this.fetchWithRetry(`${this.baseUrl}/api/get?${params.toString()}`, {
         headers: { 'Lrclib-Client': LRCLIB_USER_AGENT },
       });
 

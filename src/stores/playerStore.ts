@@ -12,6 +12,7 @@ interface PlayerState {
   duration: number;
   volume: number;
   playbackRate: number;
+  audioQuality: string;
   isLoading: boolean;
   error: string | null;
 
@@ -22,6 +23,7 @@ interface PlayerState {
   seek: (time: number) => void;
   setVolume: (volume: number) => void;
   setPlaybackRate: (rate: number) => void;
+  setAudioQuality: (quality: string) => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
   setIsLoading: (loading: boolean) => void;
@@ -38,6 +40,7 @@ export const usePlayerStore = create<PlayerState>()(
       duration: 0,
       volume: 0.8,
       playbackRate: 1,
+      audioQuality: '320kbps',
       isLoading: false,
       error: null,
 
@@ -62,19 +65,26 @@ export const usePlayerStore = create<PlayerState>()(
           }
         }
 
-        const url = getDownloadUrl(fullSong.downloadUrl, '320kbps');
+        const url = getDownloadUrl(fullSong.downloadUrl, get().audioQuality);
         if (!url) {
           set({ error: 'No audio URL available for this song', isLoading: false });
           return;
         }
 
+        // Preserve currentTime if we are just resuming the exact same song after a refresh
+        const isSameSong = get().currentSong?.id === fullSong.id;
+        const startAt = isSameSong ? get().currentTime : 0;
+
         set({
           currentSong: fullSong,
-          currentTime: 0,
+          currentTime: startAt,
           duration: fullSong.duration || 0,
         });
 
         audioEngine.load(url);
+        if (startAt > 0) {
+          audioEngine.seek(startAt);
+        }
         audioEngine.setVolume(get().volume);
         audioEngine.setPlaybackRate(get().playbackRate);
         audioEngine.play().catch((err) => {
@@ -84,6 +94,13 @@ export const usePlayerStore = create<PlayerState>()(
       },
 
       play: () => {
+        const { currentSong } = get();
+        // If we have a persisted song but audio engine is empty (e.g., after refresh)
+        if (!audioEngine.src && currentSong) {
+          get().playSong(currentSong);
+          return;
+        }
+
         audioEngine.play().catch(() => {
           set({ error: 'Failed to resume playback' });
         });
@@ -115,6 +132,14 @@ export const usePlayerStore = create<PlayerState>()(
       setPlaybackRate: (rate: number) => {
         audioEngine.setPlaybackRate(rate);
         set({ playbackRate: rate });
+      },
+
+      setAudioQuality: (quality: string) => {
+        set({ audioQuality: quality });
+        const { currentSong } = get();
+        if (currentSong && !audioEngine.paused && audioEngine.src) {
+          get().playSong(currentSong);
+        }
       },
 
       setCurrentTime: (time: number) => set({ currentTime: time }),
@@ -169,8 +194,11 @@ export const usePlayerStore = create<PlayerState>()(
     {
       name: 'tunehina-player',
       partialize: (state) => ({
+        currentSong: state.currentSong,
+        currentTime: state.currentTime,
         volume: state.volume,
         playbackRate: state.playbackRate,
+        audioQuality: state.audioQuality,
       }),
     },
   ),

@@ -5,11 +5,24 @@ import { lrcLibProvider } from './LrcLibProvider';
 import { boiduLyricsProvider } from './BoiduLyricsProvider';
 import { parseLrc } from './parsers/lrc-parser';
 import { getArtistNames } from '../../lib/utils';
+import { offlineDetector } from '../../services/offlineDetector';
 
 class LyricsManager {
   private cache = new Map<string, LyricsResult | null>();
+  private currentSongId: string | null = null;
+  private lastFailedSong: Song | null = null;
+
+  constructor() {
+    offlineDetector.subscribe((isOnline) => {
+      if (isOnline && this.lastFailedSong) {
+        this.getLyrics(this.lastFailedSong);
+      }
+    });
+  }
 
   async getLyrics(song: Song, onProgress?: (status: string) => void): Promise<LyricsResult | null> {
+    this.currentSongId = song.id;
+    this.lastFailedSong = null;
     const cacheKey = `${song.id}`;
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey) ?? null;
@@ -23,6 +36,8 @@ class LyricsManager {
     try {
       onProgress?.('Searching for lyrics...');
       const syncedRaw = await jiosaavnProvider.getSyncedLyrics(song.id);
+      if (this.currentSongId !== song.id) return null;
+
       if (syncedRaw) {
         onProgress?.('Preparing synchronized lyrics...');
         const lines = parseLrc(syncedRaw);
@@ -44,6 +59,8 @@ class LyricsManager {
     try {
       onProgress?.('Trying fallback provider...');
       const lrcResult = await lrcLibProvider.getLyrics(song.name, artistName, albumName, duration);
+      if (this.currentSongId !== song.id) return null;
+
       if (lrcResult && (lrcResult.synced || lrcResult.plain)) {
         onProgress?.('Preparing synchronized lyrics...');
         this.cache.set(cacheKey, lrcResult);
@@ -57,6 +74,8 @@ class LyricsManager {
     try {
       onProgress?.('Trying Better Lyrics...');
       const boiduResult = await boiduLyricsProvider.getLyrics(song.name, artistName, albumName, duration);
+      if (this.currentSongId !== song.id) return null;
+
       if (boiduResult && (boiduResult.synced || boiduResult.plain)) {
         onProgress?.('Preparing synchronized lyrics...');
         this.cache.set(cacheKey, boiduResult);
@@ -69,6 +88,8 @@ class LyricsManager {
     // Strategy 4: JioSaavn plain lyrics
     try {
       const plainRaw = await jiosaavnProvider.getLyrics(song.id);
+      if (this.currentSongId !== song.id) return null;
+
       if (plainRaw) {
         const result: LyricsResult = {
           synced: null,
@@ -82,8 +103,8 @@ class LyricsManager {
       // All providers failed
     }
 
-    // No lyrics found
-    this.cache.set(cacheKey, null);
+    // All providers failed, do not cache permanent null
+    this.lastFailedSong = song;
     return null;
   }
 

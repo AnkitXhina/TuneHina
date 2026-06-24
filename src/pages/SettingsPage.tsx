@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { usePlayerStore } from '../stores/playerStore';
 import { Volume2, Palette, HardDrive, Info, ChevronDown, Check } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
@@ -10,7 +10,8 @@ const QUALITIES = [
 ];
 
 export default function SettingsPage() {
-  const [quality, setQuality] = useState('320kbps');
+  const quality = usePlayerStore(s => s.audioQuality);
+  const setQuality = usePlayerStore(s => s.setAudioQuality);
 
   return (
     <div className="p-8 max-w-2xl">

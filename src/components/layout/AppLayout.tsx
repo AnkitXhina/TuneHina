@@ -1,10 +1,10 @@
 import { Suspense, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
+import { BottomNav } from './BottomNav';
 import { MiniPlayer } from '../player/MiniPlayer';
 import { usePlayerStore } from '../../stores/playerStore';
 import { useUIStore } from '../../stores/uiStore';
-import { offlineDetector } from '../../services/offlineDetector';
 
 export function AppLayout() {
   const sidebarCollapsed = useUIStore(s => s.sidebarCollapsed);
@@ -14,9 +14,6 @@ export function AppLayout() {
   const setIsMobile = useUIStore(s => s.setIsMobile);
 
   useEffect(() => {
-    const unsubOffline = offlineDetector.subscribe((online) => {
-      setIsOffline(!online);
-    });
 
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
@@ -25,10 +22,9 @@ export function AppLayout() {
     window.addEventListener('resize', handleResize);
 
     return () => {
-      unsubOffline();
       window.removeEventListener('resize', handleResize);
     };
-  }, [setIsOffline, setIsMobile]);
+  }, [setIsMobile]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-transparent relative z-0">
@@ -38,8 +34,8 @@ export function AppLayout() {
       {/* Main Content */}
       <main
         className={`flex-1 overflow-y-auto transition-all duration-300 relative ${
-          currentSong ? 'pb-32' : ''
-        } ${sidebarCollapsed && !nowPlayingOpen ? 'ml-[72px]' : !nowPlayingOpen ? 'ml-64' : ''}`}
+          currentSong ? 'pb-[144px] md:pb-32' : 'pb-20 md:pb-0'
+        } ${sidebarCollapsed && !nowPlayingOpen ? 'md:ml-[72px]' : !nowPlayingOpen ? 'md:ml-64' : ''}`}
       >
         <Suspense
           fallback={
@@ -54,6 +50,9 @@ export function AppLayout() {
 
       {/* Persistent Mini Player */}
       {currentSong && !nowPlayingOpen && <MiniPlayer />}
+
+      {/* Bottom Mobile Navigation */}
+      <BottomNav />
     </div>
   );
 }
