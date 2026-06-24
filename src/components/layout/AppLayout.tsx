@@ -10,7 +10,6 @@ export function AppLayout() {
   const sidebarCollapsed = useUIStore(s => s.sidebarCollapsed);
   const nowPlayingOpen = useUIStore(s => s.nowPlayingOpen);
   const currentSong = usePlayerStore(s => s.currentSong);
-  const setIsOffline = useUIStore(s => s.setIsOffline);
   const setIsMobile = useUIStore(s => s.setIsMobile);
 
   useEffect(() => {
