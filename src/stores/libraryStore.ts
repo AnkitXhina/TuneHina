@@ -23,6 +23,7 @@ interface LibraryState {
   getPlaylists: () => Promise<UserPlaylist[]>;
   getPlaylist: (id: string) => Promise<UserPlaylist | undefined>;
   initFromDB: () => Promise<void>;
+  clearRecentlyPlayed: () => Promise<void>;
 }
 
 export const useLibraryStore = create<LibraryState>()((set, get) => ({
@@ -89,6 +90,15 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
   getRecentlyPlayed: async () => {
     const recent = await db.recentlyPlayed.orderBy('playedAt').reverse().limit(CACHE_CONFIG.RECENTLY_PLAYED_MAX).toArray();
     return recent.map(r => r.song);
+  },
+
+  clearRecentlyPlayed: async () => {
+    try {
+      await db.recentlyPlayed.clear();
+      set({ recentlyPlayedIds: [] });
+    } catch (error) {
+      console.error('[Library] clearRecentlyPlayed failed:', error);
+    }
   },
 
   createPlaylist: async (name: string, description?: string) => {

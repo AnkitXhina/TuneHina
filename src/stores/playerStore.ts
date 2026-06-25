@@ -13,6 +13,8 @@ interface PlayerState {
   volume: number;
   playbackRate: number;
   audioQuality: string;
+  normalizeVolume: boolean;
+  crossfade: boolean;
   isLoading: boolean;
   error: string | null;
 
@@ -24,6 +26,8 @@ interface PlayerState {
   setVolume: (volume: number) => void;
   setPlaybackRate: (rate: number) => void;
   setAudioQuality: (quality: string) => void;
+  setNormalizeVolume: (normalize: boolean) => void;
+  setCrossfade: (crossfade: boolean) => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
   setIsLoading: (loading: boolean) => void;
@@ -41,6 +45,8 @@ export const usePlayerStore = create<PlayerState>()(
       volume: 0.8,
       playbackRate: 1,
       audioQuality: '320kbps',
+      normalizeVolume: true,
+      crossfade: false,
       isLoading: false,
       error: null,
 
@@ -142,6 +148,9 @@ export const usePlayerStore = create<PlayerState>()(
         }
       },
 
+      setNormalizeVolume: (normalize: boolean) => set({ normalizeVolume: normalize }),
+      setCrossfade: (crossfade: boolean) => set({ crossfade: crossfade }),
+
       setCurrentTime: (time: number) => set({ currentTime: time }),
       setDuration: (duration: number) => set({ duration }),
       setIsLoading: (loading: boolean) => set({ isLoading: loading }),
@@ -199,6 +208,8 @@ export const usePlayerStore = create<PlayerState>()(
         volume: state.volume,
         playbackRate: state.playbackRate,
         audioQuality: state.audioQuality,
+        normalizeVolume: state.normalizeVolume,
+        crossfade: state.crossfade,
       }),
     },
   ),

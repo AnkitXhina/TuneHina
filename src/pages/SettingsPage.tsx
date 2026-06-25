@@ -1,5 +1,8 @@
+import { useState, useEffect } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
-import { Volume2, Palette, HardDrive, Info, ChevronDown, Check } from 'lucide-react';
+import { useLibraryStore } from '../stores/libraryStore';
+import { lyricsManager } from '../providers/lyrics/LyricsManager';
+import { Volume2, HardDrive, Info, ChevronDown, Check, Sliders } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
 const QUALITIES = [
@@ -12,9 +15,46 @@ const QUALITIES = [
 export default function SettingsPage() {
   const quality = usePlayerStore(s => s.audioQuality);
   const setQuality = usePlayerStore(s => s.setAudioQuality);
+  const normalizeVolume = usePlayerStore(s => s.normalizeVolume);
+  const setNormalizeVolume = usePlayerStore(s => s.setNormalizeVolume);
+  const crossfade = usePlayerStore(s => s.crossfade);
+  const setCrossfade = usePlayerStore(s => s.setCrossfade);
+  
+  const clearRecentlyPlayed = useLibraryStore(s => s.clearRecentlyPlayed);
+
+  const [storageInfo, setStorageInfo] = useState<{ used: number; total: number } | null>(null);
+
+  const updateStorage = () => {
+    if (navigator.storage && navigator.storage.estimate) {
+      navigator.storage.estimate().then(estimate => {
+        setStorageInfo({
+          used: estimate.usage || 0,
+          total: estimate.quota || 0
+        });
+      });
+    }
+  };
+
+  useEffect(() => {
+    updateStorage();
+  }, []);
+
+  const formatMB = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+
+  const handleClearLyrics = () => {
+    lyricsManager.clearCache();
+    updateStorage(); // Re-fetch storage size
+    alert('Lyrics cache cleared!');
+  };
+
+  const handleClearRecent = async () => {
+    await clearRecentlyPlayed();
+    updateStorage(); // Re-fetch storage size
+    alert('Recently played history cleared!');
+  };
 
   return (
-    <div className="p-8 max-w-2xl">
+    <div className="p-8 pb-32 max-w-2xl">
       <h1 className="mb-8 text-3xl font-bold text-white">Settings</h1>
 
       <div className="space-y-6">
@@ -48,29 +88,75 @@ export default function SettingsPage() {
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
+          <p className="mt-4 text-xs text-gray-500">
+            * Theme adapts automatically to album artwork based on the current playing track.
+          </p>
         </div>
 
-        {/* Theme */}
+        {/* Playback */}
         <div className="rounded-xl border border-white/5 bg-white/[0.02] p-6">
           <div className="flex items-center gap-3 mb-4">
-            <Palette className="h-5 w-5 text-gray-400" />
-            <h2 className="text-lg font-semibold text-white">Theme</h2>
+            <Sliders className="h-5 w-5 text-gray-400" />
+            <h2 className="text-lg font-semibold text-white">Playback</h2>
           </div>
-          <p className="text-sm text-gray-400">
-            Dynamic colors are extracted from album artwork automatically.
-            The theme adapts to whatever song you&apos;re listening to.
-          </p>
+          <div className="space-y-4">
+            <label className="flex items-center justify-between cursor-pointer">
+              <div>
+                <p className="text-sm font-medium text-white">Normalize Volume</p>
+                <p className="text-xs text-gray-400 mt-0.5">Maintain consistent volume across different songs</p>
+              </div>
+              <button 
+                onClick={() => setNormalizeVolume(!normalizeVolume)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${normalizeVolume ? 'bg-theme-primary' : 'bg-white/10'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${normalizeVolume ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </label>
+            <label className="flex items-center justify-between cursor-pointer">
+              <div>
+                <p className="text-sm font-medium text-white">Crossfade</p>
+                <p className="text-xs text-gray-400 mt-0.5">Smoothly transition between songs</p>
+              </div>
+              <button 
+                onClick={() => setCrossfade(!crossfade)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${crossfade ? 'bg-theme-primary' : 'bg-white/10'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${crossfade ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </label>
+          </div>
         </div>
 
         {/* Storage */}
         <div className="rounded-xl border border-white/5 bg-white/[0.02] p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <HardDrive className="h-5 w-5 text-gray-400" />
-            <h2 className="text-lg font-semibold text-white">Storage</h2>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <HardDrive className="h-5 w-5 text-gray-400" />
+              <h2 className="text-lg font-semibold text-white">Storage</h2>
+            </div>
+            {storageInfo && (
+              <span className="text-xs text-gray-400 bg-white/5 px-2 py-1 rounded-md">
+                {formatMB(storageInfo.used)} / {formatMB(storageInfo.total)} used
+              </span>
+            )}
           </div>
-          <p className="text-sm text-gray-400">
-            Downloaded songs and cached data are stored locally in your browser.
+          <p className="text-sm text-gray-400 mb-6">
+            Downloaded songs and cached data are stored locally in your browser to save bandwidth and improve load times.
           </p>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button 
+              onClick={handleClearLyrics}
+              className="flex-1 bg-white/5 hover:bg-white/10 text-sm font-medium text-white py-2.5 rounded-lg transition-colors border border-white/5"
+            >
+              Clear Lyrics Cache
+            </button>
+            <button 
+              onClick={handleClearRecent}
+              className="flex-1 bg-white/5 hover:bg-white/10 text-sm font-medium text-white py-2.5 rounded-lg transition-colors border border-white/5"
+            >
+              Clear Recently Played
+            </button>
+          </div>
         </div>
 
         {/* About */}

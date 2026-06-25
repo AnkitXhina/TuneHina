@@ -43,7 +43,7 @@ export function Sidebar() {
         </button>
         
         <div 
-          className="flex items-center gap-3 cursor-pointer overflow-hidden"
+          className="hidden md:flex items-center gap-3 cursor-pointer overflow-hidden"
           onClick={() => navigate('/')}
         >
           <img

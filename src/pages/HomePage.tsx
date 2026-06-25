@@ -150,6 +150,7 @@ export default function HomePage() {
   const getRecentlyPlayed = useLibraryStore(s => s.getRecentlyPlayed);
 
   useEffect(() => {
+    window.history.scrollRestoration = 'manual';
     const load = async () => {
       setLoading(true);
       const provider = getMusicProvider();
@@ -209,11 +210,14 @@ export default function HomePage() {
   }
 
   return (
-    <div className="px-8 pt-8 pb-32 space-y-10">
+    <div className="px-6 pt-5 pb-32 space-y-10 overflow-hidden w-full">
 
       {/* Greeting */}
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
-        <h1 className="text-3xl font-bold text-white tracking-tight">{getGreeting()}</h1>
+        <div className="flex items-center justify-between pt-2 mb-6 md:hidden">
+          <img src="/icon-transparent.svg" className="h-10 w-10" style={{ minWidth: '40px', minHeight: '40px' }} />
+        </div>
+        <h1 className="text-3xl md:text-5xl font-bold text-white tracking-tight">{getGreeting()}</h1>
         <p className="mt-1 text-sm text-white/40">Discover music that moves you</p>
       </motion.div>
 
