@@ -1,8 +1,6 @@
-import { useState, useEffect } from 'react';
 import { usePlayerStore } from '../stores/playerStore';
-import { useLibraryStore } from '../stores/libraryStore';
 import { lyricsManager } from '../providers/lyrics/LyricsManager';
-import { Volume2, HardDrive, Info, ChevronDown, Check, Sliders } from 'lucide-react';
+import { Volume2, Info, ChevronDown, Check, Sliders } from 'lucide-react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 
 const QUALITIES = [
@@ -19,39 +17,6 @@ export default function SettingsPage() {
   const setNormalizeVolume = usePlayerStore(s => s.setNormalizeVolume);
   const crossfade = usePlayerStore(s => s.crossfade);
   const setCrossfade = usePlayerStore(s => s.setCrossfade);
-  
-  const clearRecentlyPlayed = useLibraryStore(s => s.clearRecentlyPlayed);
-
-  const [storageInfo, setStorageInfo] = useState<{ used: number; total: number } | null>(null);
-
-  const updateStorage = () => {
-    if (navigator.storage && navigator.storage.estimate) {
-      navigator.storage.estimate().then(estimate => {
-        setStorageInfo({
-          used: estimate.usage || 0,
-          total: estimate.quota || 0
-        });
-      });
-    }
-  };
-
-  useEffect(() => {
-    updateStorage();
-  }, []);
-
-  const formatMB = (bytes: number) => (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-
-  const handleClearLyrics = () => {
-    lyricsManager.clearCache();
-    updateStorage(); // Re-fetch storage size
-    alert('Lyrics cache cleared!');
-  };
-
-  const handleClearRecent = async () => {
-    await clearRecentlyPlayed();
-    updateStorage(); // Re-fetch storage size
-    alert('Recently played history cleared!');
-  };
 
   return (
     <div className="p-8 pb-32 max-w-2xl">
@@ -127,37 +92,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Storage */}
-        <div className="rounded-xl border border-white/5 bg-white/[0.02] p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <HardDrive className="h-5 w-5 text-gray-400" />
-              <h2 className="text-lg font-semibold text-white">Storage</h2>
-            </div>
-            {storageInfo && (
-              <span className="text-xs text-gray-400 bg-white/5 px-2 py-1 rounded-md">
-                {formatMB(storageInfo.used)} / {formatMB(storageInfo.total)} used
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-gray-400 mb-6">
-            Downloaded songs and cached data are stored locally in your browser to save bandwidth and improve load times.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <button 
-              onClick={handleClearLyrics}
-              className="flex-1 bg-white/5 hover:bg-white/10 text-sm font-medium text-white py-2.5 rounded-lg transition-colors border border-white/5"
-            >
-              Clear Lyrics Cache
-            </button>
-            <button 
-              onClick={handleClearRecent}
-              className="flex-1 bg-white/5 hover:bg-white/10 text-sm font-medium text-white py-2.5 rounded-lg transition-colors border border-white/5"
-            >
-              Clear Recently Played
-            </button>
-          </div>
-        </div>
+
 
         {/* About */}
         <div className="rounded-xl border border-white/5 bg-white/[0.02] p-6">
@@ -168,9 +103,37 @@ export default function SettingsPage() {
           <p className="text-sm text-gray-400">
             TuneHina v1.0.0 — A modern music streaming experience.
           </p>
-          <p className="mt-2 text-xs text-gray-500">
+          <p className="mt-2 text-xs text-gray-500 mb-6">
             Built with React, TypeScript, and ❤️
           </p>
+          <div className="pt-6 border-t border-white/5">
+            <button
+              onClick={async () => {
+                const confirmed = window.confirm('This will clear all your data including library, downloads, recently played and settings. Are you sure?');
+                if (confirmed) {
+                  // Clear localStorage
+                  localStorage.clear();
+                  
+                  // Clear IndexedDB
+                  try {
+                    const dbs = await indexedDB.databases();
+                    await Promise.all(dbs.map(db => indexedDB.deleteDatabase(db.name!)));
+                  } catch (e) {
+                    console.warn('Failed to clear indexedDB', e);
+                  }
+                  
+                  // Clear lyrics cache
+                  lyricsManager.clearCache();
+                  
+                  // Reload the app
+                  window.location.reload();
+                }
+              }}
+              className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-sm font-medium rounded-lg transition-colors border border-red-500/20"
+            >
+              Clear All Data
+            </button>
+          </div>
         </div>
       </div>
     </div>
