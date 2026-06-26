@@ -517,11 +517,11 @@ export default function NowPlayingPage() {
       </div>
 
       {/* ── Main Content ── */}
-      <div className="relative z-10 flex flex-1 flex-col md:flex-row gap-6 md:gap-10 overflow-hidden px-6 md:px-10 pb-4 md:pb-6 min-h-0">
+      <div className="relative z-10 flex flex-1 flex-col md:flex-row gap-6 md:gap-10 overflow-y-auto md:overflow-hidden px-4 sm:px-8 md:px-10 pb-6">
 
         {/* ── Left Pane: Artwork + Info + Controls ── */}
         <div className={cn(
-          'flex flex-shrink-0 flex-col items-center justify-center gap-4 min-h-0 overflow-hidden transition-all duration-700 ease-out origin-left',
+          'flex flex-shrink-0 flex-col items-center justify-start md:justify-center pt-4 md:pt-0 gap-4 px-3 sm:px-6 transition-all duration-700 ease-out origin-left',
           isImmersiveMode
             ? 'w-full md:w-[35%] md:max-w-[420px] scale-95'
             : 'w-full md:w-[45%] md:max-w-[480px] scale-100'
@@ -577,7 +577,7 @@ export default function NowPlayingPage() {
             'w-full mx-auto transition-all duration-700 ease-out',
             isImmersiveMode ? 'opacity-50 hover:opacity-100' : 'opacity-100'
           )}
-            style={{ maxWidth: 'min(300px, 42vw)' }}
+            style={{ maxWidth: 'min(380px, 90vw)' }}
           >
             {/* Song Info */}
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -646,7 +646,7 @@ export default function NowPlayingPage() {
               </div>
 
               {/* Playback Controls */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between pr-2">
                 {/* Shuffle */}
                 <button onClick={toggleShuffle} className={cn('icon-btn', isShuffled && 'active')} aria-label="Shuffle">
                   <Shuffle className="h-5 w-5" />
@@ -694,7 +694,7 @@ export default function NowPlayingPage() {
 
         {/* ── Right Pane: Tabs ── */}
         <div className={cn(
-          'flex flex-col overflow-hidden transition-all duration-700 ease-out mt-6 md:mt-0 flex-1 min-h-0',
+          'flex flex-col transition-all duration-700 ease-out mt-2 md:mt-0 md:flex-1 md:min-h-0 md:overflow-hidden',
           isImmersiveMode ? 'pl-0 md:pl-10' : 'pl-0'
         )}>
           {/* Tab Headers */}

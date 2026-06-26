@@ -9,7 +9,7 @@ type HSL = [number, number, number];
 class ThemeEngine {
   private currentArtworkUrl: string | null = null;
   private cache: Map<string, ThemeColors> = new Map();
-  private maxCacheSize = 50;
+  private maxCacheSize = 20;
 
   constructor() {
     // No initialization needed for colorthief v3
@@ -364,12 +364,21 @@ class ThemeEngine {
 
   // ── Image Loading ───────────────────────────────────────────
 
-  private loadImage(url: string): Promise<HTMLImageElement> {
+  private loadImage(url: string): Promise<HTMLCanvasElement> {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
 
-      img.onload = () => resolve(img);
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 100;
+        canvas.height = 100;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, 100, 100);
+        }
+        resolve(canvas);
+      };
       img.onerror = () => reject(new Error(`Failed to load image: ${url}`));
 
       // Append cache-bust only if no query params exist (helps avoid CORS issues with some CDNs)
