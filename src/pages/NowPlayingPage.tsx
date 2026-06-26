@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
   Volume2, VolumeX, ChevronDown, Heart, ListMusic, Mic2, Radio,
-  MoreHorizontal, Disc3, Plus, Maximize2, Minimize2, Download, RefreshCw
+  MoreHorizontal, Disc3, Maximize2, Minimize2, Download, RefreshCw,
+  MoreVertical, ListPlus, PlusSquare, Disc, User
 } from 'lucide-react';
 import { usePlayerStore } from '../stores/playerStore';
 import { useQueueStore } from '../stores/queueStore';
@@ -19,6 +20,7 @@ import type { Song } from '../types/music';
 import type { LyricsResult } from '../types/lyrics';
 import { getImageUrl, formatTime, cn, getDownloadUrl } from '../lib/utils';
 import { ArtistLinks } from '../components/ui/ArtistLinks';
+import { useDownloadStore } from '../stores/downloadStore';
 
 type NowPlayingTab = 'upnext' | 'lyrics' | 'details';
 
@@ -29,11 +31,7 @@ export default function NowPlayingPage() {
   const [lyricsLoading, setLyricsLoading] = useState(true);
   const [lyricsStatus, setLyricsStatus] = useState('Searching for lyrics...');
   const [isReloadingLyrics, setIsReloadingLyrics] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [activeLyricIndex, setActiveLyricIndex] = useState(-1);
-  const [userPlaylists, setUserPlaylists] = useState<import('../services/db').UserPlaylist[]>([]);
-  const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
-  const [newPlaylistName, setNewPlaylistName] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isImmersiveMode, setIsImmersiveMode] = useState(false);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
@@ -98,7 +96,8 @@ export default function NowPlayingPage() {
 
   const extractFromArtwork = useThemeStore(s => s.extractFromArtwork);
   const toggleLike = useLibraryStore(s => s.toggleLike);
-  const isLiked = useLibraryStore(s => s.isLiked);
+  const likedSongIds = useLibraryStore(s => s.likedSongIds);
+  const isLiked = (id: string) => likedSongIds.includes(id);
   const addToRecentlyPlayed = useLibraryStore(s => s.addToRecentlyPlayed);
   const setNowPlayingOpen = useUIStore(s => s.setNowPlayingOpen);
 
@@ -192,9 +191,6 @@ export default function NowPlayingPage() {
     fetchMore();
   }, [needsRecommendations, currentSong?.id]);
 
-  useEffect(() => {
-    useLibraryStore.getState().getPlaylists().then(setUserPlaylists);
-  }, []);
 
   useEffect(() => {
     if (!lyrics?.synced) return;
@@ -316,18 +312,33 @@ export default function NowPlayingPage() {
   };
 
   const handleDownload = async (song: Song) => {
+    const { startDownload, updateProgress, completeDownload, clearDownload } = useDownloadStore.getState();
     try {
-      useUIStore.getState().addToast({ message: `Downloading ${song.name}...`, type: 'info' });
+      startDownload(song.name);
       const url = getDownloadUrl(song.downloadUrl, audioQuality);
       if (!url) {
         useUIStore.getState().addToast({ message: 'No download URL available', type: 'error' });
+        clearDownload();
         return;
       }
       
-      setDownloadProgress(0);
       const response = await fetch(url);
       const contentLength = response.headers.get('Content-Length');
       const total = contentLength ? parseInt(contentLength) : 0;
+      
+      if (!total) {
+        const blob = await response.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${song.name}.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+        completeDownload();
+        return;
+      }
+
       const reader = response.body!.getReader();
       const chunks: Uint8Array<ArrayBuffer>[] = [];
       let received = 0;
@@ -337,7 +348,7 @@ export default function NowPlayingPage() {
         if (done) break;
         chunks.push(value);
         received += value.length;
-        if (total) setDownloadProgress(Math.round((received / total) * 100));
+        if (total) updateProgress((received / total) * 100);
       }
       
       const blob = new Blob(chunks);
@@ -348,11 +359,10 @@ export default function NowPlayingPage() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
-      setDownloadProgress(null);
-      useUIStore.getState().addToast({ message: `Downloaded ${song.name}!`, type: 'success' });
+      completeDownload();
     } catch (e) {
       console.error('Download failed', e);
-      setDownloadProgress(null);
+      clearDownload();
       useUIStore.getState().addToast({ message: `Failed to download ${song.name}`, type: 'error' });
     }
   };
@@ -386,7 +396,7 @@ export default function NowPlayingPage() {
           <p className="text-xs text-gray-300 truncate max-w-[200px]">{currentSong.album.name}</p>
         </div>
         <div className="flex items-center gap-2">
-          <DropdownMenu.Root>
+          <DropdownMenu.Root modal={true}>
             <DropdownMenu.Trigger asChild>
               <button className="icon-btn" aria-label="More options">
                 <MoreHorizontal className="h-6 w-6" />
@@ -421,54 +431,22 @@ export default function NowPlayingPage() {
                   className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
                   onSelect={(e) => {
                     e.preventDefault();
-                    if (downloadProgress === null) handleDownload(currentSong);
+                    handleDownload(currentSong);
                   }}
                 >
-                  {downloadProgress !== null ? (
-                    <span className="text-xs font-medium w-4 text-center">{downloadProgress}%</span>
-                  ) : (
-                    <Download className="h-4 w-4" />
-                  )}
-                  {downloadProgress !== null ? 'Downloading...' : 'Download'}
+                  <Download className="h-4 w-4" /> Download
                 </DropdownMenu.Item>
 
-                <DropdownMenu.Sub>
-                  <DropdownMenu.SubTrigger className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white data-[state=open]:bg-white/10 data-[state=open]:text-white">
-                    <ListMusic className="h-4 w-4" />
-                    <span className="flex-1">Add to Playlist</span>
-                  </DropdownMenu.SubTrigger>
-                  <DropdownMenu.Portal>
-                    <DropdownMenu.SubContent
-                      className="z-[60] w-48 rounded-xl border border-white/10 bg-surface-light p-1.5 text-sm text-gray-200 shadow-2xl animate-in slide-in-from-left-1"
-                      sideOffset={2} alignOffset={-5}
-                    >
-                      <DropdownMenu.Item
-                        className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white text-theme-primary-light"
-                        onSelect={() => setIsCreatingPlaylist(true)}
-                      >
-                        <Plus className="h-4 w-4" />
-                        Create New Playlist
-                      </DropdownMenu.Item>
-                      {userPlaylists.length > 0 && <DropdownMenu.Separator className="my-1 h-px bg-white/10" />}
-                      {userPlaylists.length === 0 ? (
-                        <div className="px-2 py-2 text-xs text-gray-500 text-center">No playlists yet</div>
-                      ) : (
-                        userPlaylists.map(pl => (
-                          <DropdownMenu.Item
-                            key={pl.id}
-                            className="flex cursor-pointer select-none items-center rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white truncate"
-                            onSelect={async () => {
-                              await useLibraryStore.getState().addToPlaylist(pl.id, currentSong);
-                              useUIStore.getState().addToast({ message: `Added to ${pl.name}`, type: 'success' });
-                            }}
-                          >
-                            {pl.name}
-                          </DropdownMenu.Item>
-                        ))
-                      )}
-                    </DropdownMenu.SubContent>
-                  </DropdownMenu.Portal>
-                </DropdownMenu.Sub>
+                <DropdownMenu.Item
+                  className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    useUIStore.getState().setPlaylistPickerSong(currentSong);
+                    useUIStore.getState().openModal('playlist-picker');
+                  }}
+                >
+                  <PlusSquare className="h-4 w-4" /> Save to Playlist
+                </DropdownMenu.Item>
 
                 <DropdownMenu.Separator className="my-1 h-px bg-white/10" />
 
@@ -616,6 +594,27 @@ export default function NowPlayingPage() {
                   onMouseDown={handleMouseDown}
                   onMouseMove={handleMouseMove}
                   onMouseLeave={handleMouseLeave}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const pct = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+                    setTooltipLeft(pct * 100);
+                    setTooltipTime(formatTime(pct * duration));
+                    seek(pct * duration);
+                  }}
+                  onTouchMove={(e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const pct = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+                    setTooltipLeft(pct * 100);
+                    setTooltipTime(formatTime(pct * duration));
+                    seek(pct * duration);
+                  }}
+                  onTouchEnd={() => {
+                    setTooltipLeft(null);
+                  }}
                 >
                   <div className="progress-bar" ref={progressBarRef}>
                     {/* Tooltip */}
@@ -797,9 +796,97 @@ export default function NowPlayingPage() {
                                 <ArtistLinks artists={song.artists} />
                               </p>
                             </div>
-                            <span className="text-sm font-medium text-white/35 tabular-nums flex-shrink-0">
+                            <span className="text-sm font-medium text-white/35 tabular-nums flex-shrink-0 pr-2 md:pr-0">
                               {formatTime(song.duration)}
                             </span>
+                            <div className="opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                              <DropdownMenu.Root>
+                                <DropdownMenu.Trigger asChild>
+                                  <button className="p-2 -mr-2 text-white/40 hover:text-white" aria-label="More options">
+                                    <MoreVertical className="h-5 w-5" />
+                                  </button>
+                                </DropdownMenu.Trigger>
+                                <DropdownMenu.Portal>
+                                  <DropdownMenu.Content
+                                    className="z-[100] w-56 rounded-xl border border-white/10 bg-[#1a1a24] p-1.5 text-sm text-gray-200 shadow-2xl animate-in fade-in zoom-in-95 data-[side=bottom]:slide-in-from-top-2"
+                                    sideOffset={5}
+                                    align="end"
+                                  >
+                                    <DropdownMenu.Item
+                                      className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                                      onSelect={() => {
+                                        useQueueStore.getState().addNext(song);
+                                        useUIStore.getState().addToast({ message: 'Added to play next', type: 'success' });
+                                      }}
+                                    >
+                                      <SkipForward className="h-4 w-4" /> Play Next
+                                    </DropdownMenu.Item>
+
+                                    <DropdownMenu.Item
+                                      className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                                      onSelect={() => {
+                                        useQueueStore.getState().addToQueue(song);
+                                        useUIStore.getState().addToast({ message: 'Added to queue', type: 'success' });
+                                      }}
+                                    >
+                                      <ListPlus className="h-4 w-4" /> Add to Queue
+                                    </DropdownMenu.Item>
+
+                                    <DropdownMenu.Item
+                                      className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                                      onSelect={() => toggleLike(song)}
+                                    >
+                                      <Heart className="h-4 w-4" fill={isLiked(song.id) ? 'currentColor' : 'none'} /> 
+                                      {isLiked(song.id) ? 'Remove from Liked' : 'Add to Liked'}
+                                    </DropdownMenu.Item>
+
+                                    <DropdownMenu.Separator className="my-1 h-px bg-white/10" />
+
+                                    <DropdownMenu.Item
+                                      className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                                      onSelect={() => handleDownload(song)}
+                                    >
+                                      <Download className="h-4 w-4" /> Download
+                                    </DropdownMenu.Item>
+
+                                    <DropdownMenu.Item
+                                      className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                                      onSelect={() => {
+                                        useUIStore.getState().setPlaylistPickerSong(song);
+                                        useUIStore.getState().openModal('playlist-picker');
+                                      }}
+                                    >
+                                      <PlusSquare className="h-4 w-4" /> Save to Playlist
+                                    </DropdownMenu.Item>
+
+                                    <DropdownMenu.Separator className="my-1 h-px bg-white/10" />
+
+                                    <DropdownMenu.Item
+                                      className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                                      onSelect={() => {
+                                        setNowPlayingOpen(false);
+                                        if (song.album?.id) navigate(`/album/${song.album.id}`);
+                                      }}
+                                    >
+                                      <Disc className="h-4 w-4" /> View Album
+                                    </DropdownMenu.Item>
+
+                                    <DropdownMenu.Item
+                                      className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                                      onSelect={() => {
+                                        setNowPlayingOpen(false);
+                                        if (song.artists?.primary?.[0]?.id || song.artists?.all?.[0]?.id) {
+                                          navigate(`/artist/${song.artists.primary?.[0]?.id || song.artists.all?.[0]?.id}`);
+                                        }
+                                      }}
+                                    >
+                                      <User className="h-4 w-4" /> View Artist
+                                    </DropdownMenu.Item>
+
+                                  </DropdownMenu.Content>
+                                </DropdownMenu.Portal>
+                              </DropdownMenu.Root>
+                            </div>
                           </div>
                         );
                       })}
@@ -940,60 +1027,7 @@ export default function NowPlayingPage() {
 
       {/* ── Create Playlist Modal ── */}
       <AnimatePresence>
-        {isCreatingPlaylist && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-sm rounded-2xl border border-white/10 bg-surface-light p-6 shadow-2xl"
-            >
-              <h3 className="mb-4 text-lg font-semibold text-white">Create New Playlist</h3>
-              <input
-                autoFocus
-                type="text"
-                value={newPlaylistName}
-                onChange={e => setNewPlaylistName(e.target.value)}
-                onKeyDown={async e => {
-                  if (e.key === 'Enter' && newPlaylistName.trim()) {
-                    const id = await useLibraryStore.getState().createPlaylist(newPlaylistName.trim());
-                    await useLibraryStore.getState().addToPlaylist(id, currentSong);
-                    useLibraryStore.getState().getPlaylists().then(setUserPlaylists);
-                    useUIStore.getState().addToast({ message: `Added to ${newPlaylistName.trim()}`, type: 'success' });
-                    setIsCreatingPlaylist(false);
-                    setNewPlaylistName('');
-                  } else if (e.key === 'Escape') {
-                    setIsCreatingPlaylist(false);
-                  }
-                }}
-                placeholder="Playlist name"
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-theme-primary transition-colors"
-              />
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  onClick={() => setIsCreatingPlaylist(false)}
-                  className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={async () => {
-                    if (!newPlaylistName.trim()) return;
-                    const id = await useLibraryStore.getState().createPlaylist(newPlaylistName.trim());
-                    await useLibraryStore.getState().addToPlaylist(id, currentSong);
-                    useLibraryStore.getState().getPlaylists().then(setUserPlaylists);
-                    useUIStore.getState().addToast({ message: `Added to ${newPlaylistName.trim()}`, type: 'success' });
-                    setIsCreatingPlaylist(false);
-                    setNewPlaylistName('');
-                  }}
-                  className="rounded-full bg-theme-primary px-6 py-2 text-sm font-medium text-white transition-transform hover:scale-105 active:scale-95"
-                >
-                  Create & Add
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
+
       </AnimatePresence>
     </div>
   );

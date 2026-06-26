@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Play, ArrowLeft, Heart, MoreHorizontal, Clock } from 'lucide-react';
+import { Play, ArrowLeft, Heart, MoreHorizontal, Clock, Shuffle, SkipForward, ListPlus, PlusSquare, User } from 'lucide-react';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { useUIStore } from '../stores/uiStore';
 import type { Album, Song } from '../types/music';
 import { usePlayerStore } from '../stores/playerStore';
 import { useQueueStore } from '../stores/queueStore';
+import { useLibraryStore } from '../stores/libraryStore';
 import { getImageUrl, formatTime } from '../lib/utils';
 import { ArtistLinks } from '../components/ui/ArtistLinks';
 import { motion } from 'framer-motion';
@@ -18,6 +21,9 @@ export default function AlbumPage() {
   const isPlaying = usePlayerStore(s => s.isPlaying);
   const togglePlay = usePlayerStore(s => s.togglePlay);
   const setQueue = useQueueStore(s => s.setQueue);
+
+  const isLiked = useLibraryStore(s => album ? s.isAlbumLiked(album.id) : false);
+  const toggleLikeAlbum = useLibraryStore(s => s.toggleLikeAlbum);
 
   useEffect(() => {
     if (!id) return;
@@ -162,12 +168,84 @@ export default function AlbumPage() {
               <Play className="ml-1 h-6 w-6 fill-current" />
             )}
           </button>
-          <button className="icon-btn h-12 w-12 border border-white/10">
-            <Heart className="h-6 w-6" />
+          <button 
+            className="icon-btn h-12 w-12 border border-white/10"
+            onClick={() => album && toggleLikeAlbum(album)}
+          >
+            <Heart className={`h-6 w-6 ${isLiked ? 'fill-theme-primary text-theme-primary' : ''}`} />
           </button>
-          <button className="icon-btn h-12 w-12 border border-white/10">
-            <MoreHorizontal className="h-6 w-6" />
-          </button>
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button className="icon-btn h-12 w-12 border border-white/10">
+                <MoreHorizontal className="h-6 w-6" />
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                className="z-[100] w-56 rounded-xl border border-white/10 bg-surface-light p-1.5 text-sm text-gray-200 shadow-2xl animate-in fade-in zoom-in-95 data-[side=bottom]:slide-in-from-top-2"
+                sideOffset={5}
+                align="start"
+              >
+                <DropdownMenu.Item
+                  className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                  onSelect={() => {
+                    if (!album?.songs || album.songs.length === 0) return;
+                    const shuffled = [...album.songs].sort(() => Math.random() - 0.5);
+                    useQueueStore.getState().setQueue(shuffled, 0);
+                    playSong(shuffled[0]);
+                    useQueueStore.getState().setNeedsRecommendations(true);
+                  }}
+                >
+                  <Shuffle className="h-4 w-4" /> Shuffle Play
+                </DropdownMenu.Item>
+
+                <DropdownMenu.Item
+                  className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                  onSelect={() => {
+                    if (!album?.songs) return;
+                    useQueueStore.getState().addNextMultiple(album.songs);
+                    useUIStore.getState().addToast({ message: 'Added to play next', type: 'success' });
+                  }}
+                >
+                  <SkipForward className="h-4 w-4" /> Play Next
+                </DropdownMenu.Item>
+
+                <DropdownMenu.Item
+                  className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                  onSelect={() => {
+                    if (!album?.songs) return;
+                    useQueueStore.getState().addToQueueMultiple(album.songs);
+                    useUIStore.getState().addToast({ message: 'Added to queue', type: 'success' });
+                  }}
+                >
+                  <ListPlus className="h-4 w-4" /> Add to Queue
+                </DropdownMenu.Item>
+
+                <DropdownMenu.Separator className="my-1 h-px bg-white/10" />
+
+                <DropdownMenu.Item
+                  className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                  onSelect={() => {
+                    useUIStore.getState().setPlaylistPickerSong(album?.songs || null);
+                    useUIStore.getState().openModal('playlist-picker');
+                  }}
+                >
+                  <PlusSquare className="h-4 w-4" /> Save to Playlist
+                </DropdownMenu.Item>
+
+                <DropdownMenu.Item
+                  className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                  onSelect={() => {
+                    if (album?.artists?.primary?.[0]?.id) {
+                      navigate(`/artist/${album.artists.primary[0].id}`);
+                    }
+                  }}
+                >
+                  <User className="h-4 w-4" /> View Artist
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </div>
 
         {/* Tracklist */}

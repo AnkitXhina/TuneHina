@@ -1,9 +1,15 @@
 import Dexie, { type Table } from 'dexie';
-import type { Song } from '../types/music';
+import type { Song, Album } from '../types/music';
 
 export interface LikedSong {
   id: string;
   song: Song;
+  likedAt: number;
+}
+
+export interface LikedAlbum {
+  id: string;
+  album: Album;
   likedAt: number;
 }
 
@@ -12,6 +18,7 @@ export interface UserPlaylist {
   name: string;
   description?: string;
   songIds: string[];
+  songs?: Song[]; // Hydrated for UI displays
   createdAt: number;
   updatedAt: number;
   coverImage?: string;
@@ -45,6 +52,7 @@ export interface QueueEntry {
 
 class TuneHinaDB extends Dexie {
   likedSongs!: Table<LikedSong, string>;
+  likedAlbums!: Table<LikedAlbum, string>;
   playlists!: Table<UserPlaylist, string>;
   recentlyPlayed!: Table<RecentlyPlayed, string>;
   cachedSongs!: Table<CachedSong, string>;
@@ -60,6 +68,9 @@ class TuneHinaDB extends Dexie {
       cachedSongs: 'id, cachedAt',
       searchHistory: '++id, query, timestamp',
       queue: '++id, songId, position',
+    });
+    this.version(2).stores({
+      likedAlbums: 'id, likedAt',
     });
   }
 }

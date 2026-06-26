@@ -9,12 +9,42 @@ import type { Song } from '../types/music';
 import type { UserPlaylist } from '../services/db';
 import { getImageUrl, formatTime, cn } from '../lib/utils';
 import { ArtistLinks } from '../components/ui/ArtistLinks';
+import { Play, Disc3 } from 'lucide-react';
+import type { Album } from '../types/music';
 
-type LibraryTab = 'liked' | 'recent' | 'playlists';
+type LibraryTab = 'liked' | 'liked-albums' | 'recent' | 'playlists';
+
+function MediaCard({ item }: { item: Album }) {
+  const linkTo = `/album/${item.id}`;
+  return (
+    <Link to={linkTo} className="w-full flex-shrink-0 group/card block">
+      <motion.div whileHover={{ y: -4 }}>
+        <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-white/5">
+          <img
+            src={getImageUrl(item.image, 'high')}
+            alt={item.name}
+            className="h-full w-full object-cover transition-transform duration-300 group-hover/card:scale-105"
+            loading="lazy"
+          />
+          <div className="absolute inset-0 bg-black/0 group-hover/card:bg-black/30 transition-all duration-200 flex items-center justify-center">
+            <div className="h-12 w-12 rounded-full bg-white flex items-center justify-center shadow-xl opacity-0 group-hover/card:opacity-100 scale-75 group-hover/card:scale-100 transition-all duration-200">
+              <Play className="h-5 w-5 fill-black text-black ml-0.5" />
+            </div>
+          </div>
+        </div>
+        <div className="mt-2 px-0.5">
+          <p className="truncate text-sm font-medium text-white">{item.name}</p>
+          <p className="truncate text-xs text-white/50 mt-0.5"><ArtistLinks artists={item.artists} /></p>
+        </div>
+      </motion.div>
+    </Link>
+  );
+}
 
 export default function LibraryPage() {
   const [activeTab, setActiveTab] = useState<LibraryTab>('liked');
   const [likedSongs, setLikedSongs] = useState<Song[]>([]);
+  const [likedAlbums, setLikedAlbums] = useState<Album[]>([]);
   const [recentSongs, setRecentSongs] = useState<Song[]>([]);
   const [playlists, setPlaylists] = useState<UserPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +52,7 @@ export default function LibraryPage() {
   const [newPlaylistName, setNewPlaylistName] = useState('');
 
   const getLikedSongs = useLibraryStore(s => s.getLikedSongs);
+  const getLikedAlbums = useLibraryStore(s => s.getLikedAlbums);
   const getRecentlyPlayed = useLibraryStore(s => s.getRecentlyPlayed);
   const getPlaylists = useLibraryStore(s => s.getPlaylists);
   const createPlaylist = useLibraryStore(s => s.createPlaylist);
@@ -37,6 +68,7 @@ export default function LibraryPage() {
       getPlaylists(),
     ]);
     setLikedSongs(liked);
+    setLikedAlbums(getLikedAlbums());
     setRecentSongs(recent);
     setPlaylists(pls);
     setLoading(false);
@@ -60,6 +92,7 @@ export default function LibraryPage() {
 
   const tabs = [
     { key: 'liked' as const, label: 'Liked Songs', icon: Heart, count: likedSongs.length },
+    { key: 'liked-albums' as const, label: 'Liked Albums', icon: Disc3, count: likedAlbums.length },
     { key: 'recent' as const, label: 'Recent', icon: Clock, count: recentSongs.length },
     { key: 'playlists' as const, label: 'Playlists', icon: ListMusic, count: playlists.length },
   ];
@@ -145,11 +178,23 @@ export default function LibraryPage() {
                   {playlists.map((pl) => (
                     <div key={pl.id} className="flex items-center justify-between rounded-lg p-3 hover:bg-white/5 group">
                       <Link to={`/playlist/${pl.id}`} className="flex flex-1 items-center gap-3">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500/30 to-pink-500/30">
-                          <ListMusic className="h-5 w-5 text-gray-300" />
+                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-lg bg-white/5 overflow-hidden">
+                          {pl.songs && pl.songs.length >= 4 ? (
+                            <div className="grid grid-cols-2 w-full h-full">
+                              {pl.songs.slice(0, 4).map((song, i) => (
+                                <img key={i} src={getImageUrl(song.image, 'low')} className="w-full h-full object-cover" />
+                              ))}
+                            </div>
+                          ) : pl.songs && pl.songs.length > 0 ? (
+                            <img src={getImageUrl(pl.songs[0].image, 'low')} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-white/5">
+                              <Music className="h-5 w-5 text-white/20" />
+                            </div>
+                          )}
                         </div>
-                        <div>
-                          <p className="font-medium text-white group-hover:text-theme-primary transition-colors">{pl.name}</p>
+                        <div className="min-w-0">
+                          <p className="font-medium text-white group-hover:text-theme-primary transition-colors truncate">{pl.name}</p>
                           <p className="text-sm text-gray-400">{pl.songIds.length} songs</p>
                         </div>
                       </Link>
@@ -166,8 +211,24 @@ export default function LibraryPage() {
             </div>
           )}
 
+          {/* Albums view */}
+          {activeTab === 'liked-albums' && (
+            likedAlbums.length === 0 ? (
+              <div className="flex flex-col items-center py-16 text-gray-500">
+                <Disc3 className="mb-3 h-10 w-10" />
+                <p>No liked albums yet</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                {likedAlbums.map(album => (
+                  <MediaCard key={album.id} item={album} />
+                ))}
+              </div>
+            )
+          )}
+
           {/* Song list view */}
-          {activeTab !== 'playlists' && (
+          {(activeTab === 'liked' || activeTab === 'recent') && (
             currentSongs.length === 0 ? (
               <div className="flex flex-col items-center py-16 text-gray-500">
                 <Music className="mb-3 h-10 w-10" />

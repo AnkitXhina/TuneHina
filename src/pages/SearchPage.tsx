@@ -1,15 +1,22 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search as SearchIcon, X, Clock } from 'lucide-react';
+import { Search as SearchIcon, X, Clock, MoreVertical, Radio, SkipForward, ListPlus, Heart, Download, PlusSquare, Disc, User } from 'lucide-react';
 import { motion } from 'framer-motion';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import { useNavigate } from 'react-router-dom';
 import { useSearchStore } from '../stores/searchStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { useQueueStore } from '../stores/queueStore';
+import { useLibraryStore } from '../stores/libraryStore';
+import { useUIStore } from '../stores/uiStore';
+import { useDownloadStore } from '../stores/downloadStore';
 import type { Song } from '../types/music';
-import { getImageUrl, formatTime } from '../lib/utils';
+import { getImageUrl, formatTime, getDownloadUrl } from '../lib/utils';
 import { ArtistLinks } from '../components/ui/ArtistLinks';
+import { getMusicProvider } from '../providers/music';
 
 export default function SearchPage() {
+  const navigate = useNavigate();
   const query = useSearchStore(s => s.query);
   const results = useSearchStore(s => s.results);
   const isSearching = useSearchStore(s => s.isSearching);
@@ -21,6 +28,67 @@ export default function SearchPage() {
   const setActiveTab = useSearchStore(s => s.setActiveTab);
   const clearHistory = useSearchStore(s => s.clearHistory);
   const addToHistory = useSearchStore(s => s.addToHistory);
+
+  const toggleLike = useLibraryStore(s => s.toggleLike);
+  const likedSongIds = useLibraryStore(s => s.likedSongIds);
+  const isLiked = (id: string) => likedSongIds.includes(id);
+  const audioQuality = usePlayerStore(s => s.audioQuality);
+
+  const handleDownload = async (song: Song) => {
+    const { startDownload, updateProgress, completeDownload, clearDownload } = useDownloadStore.getState();
+    try {
+      startDownload(song.name);
+      const url = getDownloadUrl(song.downloadUrl, audioQuality);
+      if (!url) {
+        useUIStore.getState().addToast({ message: 'No download URL available', type: 'error' });
+        clearDownload();
+        return;
+      }
+      
+      const response = await fetch(url);
+      const contentLength = response.headers.get('Content-Length');
+      const total = contentLength ? parseInt(contentLength) : 0;
+      
+      if (!total) {
+        const blob = await response.blob();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `${song.name}.mp4`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+        completeDownload();
+        return;
+      }
+
+      const reader = response.body!.getReader();
+      const chunks: Uint8Array<ArrayBuffer>[] = [];
+      let received = 0;
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        if (total) updateProgress((received / total) * 100);
+      }
+      
+      const blob = new Blob(chunks);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${song.name}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      completeDownload();
+    } catch (e) {
+      console.error('Download failed', e);
+      clearDownload();
+      useUIStore.getState().addToast({ message: `Failed to download ${song.name}`, type: 'error' });
+    }
+  };
 
   const handleCommitSearch = () => {
     if (query.trim().length > 2) {
@@ -237,7 +305,7 @@ export default function SearchPage() {
                   <motion.div
                     key={song.id}
                     whileHover={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg p-2.5 transition-all"
+                    className="flex cursor-pointer items-center gap-3 rounded-lg p-2.5 transition-all group"
                     onClick={() => handlePlaySong(song)}
                   >
                     <img
@@ -251,7 +319,109 @@ export default function SearchPage() {
                         Song • <ArtistLinks artists={song.artists} />
                       </p>
                     </div>
-                    <span className="text-xs text-gray-500 tabular-nums">{formatTime(song.duration)}</span>
+                    <span className="text-xs text-gray-500 tabular-nums pr-2 md:pr-0">{formatTime(song.duration)}</span>
+                    <div className="opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+                      <DropdownMenu.Root>
+                        <DropdownMenu.Trigger asChild>
+                          <button className="p-2 -mr-2 text-gray-400 hover:text-white" aria-label="More options">
+                            <MoreVertical className="h-5 w-5" />
+                          </button>
+                        </DropdownMenu.Trigger>
+                        <DropdownMenu.Portal>
+                          <DropdownMenu.Content
+                            className="z-[100] w-56 rounded-xl border border-white/10 bg-surface-light p-1.5 text-sm text-gray-200 shadow-2xl animate-in fade-in zoom-in-95 data-[side=bottom]:slide-in-from-top-2"
+                            sideOffset={5}
+                            align="end"
+                          >
+                            <DropdownMenu.Item
+                              className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                              onSelect={async () => {
+                                const provider = getMusicProvider();
+                                const songs = await provider.getSuggestions(song.id, 50);
+                                if (songs.length > 0) {
+                                  const shuffled = [...songs].sort(() => Math.random() - 0.5);
+                                  useQueueStore.getState().setQueue([song, ...shuffled], 0);
+                                  playSong(song);
+                                  useUIStore.getState().addToast({ message: `Radio started`, type: 'success' });
+                                }
+                              }}
+                            >
+                              <Radio className="h-4 w-4" /> Start Mix
+                            </DropdownMenu.Item>
+                            
+                            <DropdownMenu.Item
+                              className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                              onSelect={() => {
+                                useQueueStore.getState().addNext(song);
+                                useUIStore.getState().addToast({ message: 'Added to play next', type: 'success' });
+                              }}
+                            >
+                              <SkipForward className="h-4 w-4" /> Play Next
+                            </DropdownMenu.Item>
+
+                            <DropdownMenu.Item
+                              className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                              onSelect={() => {
+                                useQueueStore.getState().addToQueue(song);
+                                useUIStore.getState().addToast({ message: 'Added to queue', type: 'success' });
+                              }}
+                            >
+                              <ListPlus className="h-4 w-4" /> Add to Queue
+                            </DropdownMenu.Item>
+
+                            <DropdownMenu.Item
+                              className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                              onSelect={() => toggleLike(song)}
+                            >
+                              <Heart className="h-4 w-4" fill={isLiked(song.id) ? 'currentColor' : 'none'} /> 
+                              {isLiked(song.id) ? 'Remove from Liked' : 'Add to Liked'}
+                            </DropdownMenu.Item>
+
+                            <DropdownMenu.Separator className="my-1 h-px bg-white/10" />
+
+                            <DropdownMenu.Item
+                              className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                              onSelect={() => handleDownload(song)}
+                            >
+                              <Download className="h-4 w-4" /> Download
+                            </DropdownMenu.Item>
+
+                            <DropdownMenu.Item
+                              className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                              onSelect={() => {
+                                useUIStore.getState().setPlaylistPickerSong(song);
+                                useUIStore.getState().openModal('playlist-picker');
+                              }}
+                            >
+                              <PlusSquare className="h-4 w-4" /> Save to Playlist
+                            </DropdownMenu.Item>
+
+                            <DropdownMenu.Separator className="my-1 h-px bg-white/10" />
+
+                            <DropdownMenu.Item
+                              className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                              onSelect={() => {
+                                if (song.album?.id) navigate(`/album/${song.album.id}`);
+                              }}
+                            >
+                              <Disc className="h-4 w-4" /> View Album
+                            </DropdownMenu.Item>
+
+                            <DropdownMenu.Item
+                              className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
+                              onSelect={() => {
+                                if (song.artists?.primary?.[0]?.id || song.artists?.all?.[0]?.id) {
+                                  navigate(`/artist/${song.artists.primary?.[0]?.id || song.artists.all?.[0]?.id}`);
+                                }
+                              }}
+                            >
+                              <User className="h-4 w-4" /> View Artist
+                            </DropdownMenu.Item>
+
+                          </DropdownMenu.Content>
+                        </DropdownMenu.Portal>
+                      </DropdownMenu.Root>
+                    </div>
                   </motion.div>
                 ))}
               </div>

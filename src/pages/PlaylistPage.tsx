@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Play, ArrowLeft, Heart, MoreHorizontal, Clock } from 'lucide-react';
+import { Play, ArrowLeft, Heart, MoreHorizontal, Clock, Music, Camera } from 'lucide-react';
 import type { Playlist, Song } from '../types/music';
 import { usePlayerStore } from '../stores/playerStore';
 import { useQueueStore } from '../stores/queueStore';
@@ -12,6 +12,7 @@ import { useLibraryStore } from '../stores/libraryStore';
 export default function PlaylistPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [loading, setLoading] = useState(true);
   const playSong = usePlayerStore(s => s.playSong);
@@ -39,7 +40,7 @@ export default function PlaylistPage() {
             name: localPlaylist.name,
             description: localPlaylist.description,
             type: 'playlist',
-            image: [],
+            image: localPlaylist.coverImage ? [{ quality: 'high', url: localPlaylist.coverImage }] : [],
             songCount: songs.length,
             songs: songs
           });
@@ -61,6 +62,18 @@ export default function PlaylistPage() {
 
     return () => { mounted = false; };
   }, [id]);
+
+  const handleArtworkChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !playlist) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result as string;
+      await useLibraryStore.getState().setPlaylistArtwork(playlist.id, base64);
+      setPlaylist({ ...playlist, image: [{ quality: 'high', url: base64 }] });
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handlePlaySong = (song: Song, index: number) => {
     if (currentSong?.id === song.id) {
@@ -123,13 +136,35 @@ export default function PlaylistPage() {
 
         {/* Header */}
         <div className="flex flex-col gap-6 md:flex-row md:items-end">
-          <motion.img
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            src={getImageUrl(playlist.image, 'high')}
-            alt={playlist.name}
-            className="h-56 w-56 rounded-xl object-cover shadow-2xl"
-          />
+            className="h-56 w-56 flex-shrink-0 rounded-xl shadow-2xl bg-white/5 relative group/art cursor-pointer"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <div className="w-full h-full rounded-xl overflow-hidden">
+              {playlist.image && playlist.image.length > 0 ? (
+                <img src={getImageUrl(playlist.image, 'high')} className="w-full h-full object-cover" />
+              ) : playlist.songs && playlist.songs.length >= 4 ? (
+                <div className="grid grid-cols-2 w-full h-full">
+                  {playlist.songs.slice(0, 4).map((song, i) => (
+                    <img key={i} src={getImageUrl(song.image, 'low')} className="w-full h-full object-cover" />
+                  ))}
+                </div>
+              ) : playlist.songs && playlist.songs.length > 0 ? (
+                <img src={getImageUrl(playlist.songs[0].image, 'high')} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-white/5">
+                  <Music className="h-16 w-16 text-white/20" />
+                </div>
+              )}
+            </div>
+            
+            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/art:opacity-100 transition-opacity flex items-center justify-center rounded-xl">
+              <Camera className="h-8 w-8 text-white" />
+            </div>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleArtworkChange} />
+          </motion.div>
           <div className="flex flex-col">
             <span className="mb-2 text-sm font-medium uppercase tracking-wider text-theme-primary-light">
               Playlist

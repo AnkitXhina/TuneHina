@@ -1,21 +1,26 @@
 import { useEffect, useState, useRef } from 'react';
-import { Volume2 } from 'lucide-react';
+import { Volume2, Download, CheckCircle2 } from 'lucide-react';
+import { useDownloadStore } from './stores/downloadStore';
 import { AppRouter } from './router';
 import { useUIStore } from './stores/uiStore';
 import { usePlayerStore } from './stores/playerStore';
 import { useLibraryStore } from './stores/libraryStore';
 import { useQueueStore } from './stores/queueStore';
+import { getMusicProvider } from './providers/music';
 import { offlineDetector } from './services/offlineDetector';
 import { themeEngine } from './services/themeEngine';
 import { getImageUrl } from './lib/utils';
 import { AnimatePresence } from 'framer-motion';
 import { GlobalBackground } from './components/layout/GlobalBackground';
+import { PlaylistPickerModal } from './components/ui/PlaylistPickerModal';
 
 export default function App() {
+  const activeDownload = useDownloadStore(s => s.activeDownload);
   const isOffline = useUIStore(s => s.isOffline);
   const setIsOffline = useUIStore(s => s.setIsOffline);
   const toasts = useUIStore(s => s.toasts);
   const removeToast = useUIStore(s => s.removeToast);
+  const activeModal = useUIStore(s => s.activeModal);
 
   const volume = usePlayerStore(s => s.volume);
   const [showVolumeIndicator, setShowVolumeIndicator] = useState(false);
@@ -60,6 +65,26 @@ export default function App() {
       themeEngine.resetTheme();
     }
   }, [currentSong]);
+
+  const needsRecommendations = useQueueStore(s => s.needsRecommendations);
+  const addRecommendations = useQueueStore(s => s.addRecommendations);
+
+  // Auto-fetch recommendations when queue runs low
+  useEffect(() => {
+    if (needsRecommendations && currentSong) {
+      const fetchRecs = async () => {
+        try {
+          const provider = await getMusicProvider();
+          const songs = await provider.getSuggestions(currentSong.id, 20);
+          addRecommendations(songs);
+        } catch (err) {
+          console.error('Failed to fetch recommendations', err);
+          useQueueStore.getState().setNeedsRecommendations(false);
+        }
+      };
+      fetchRecs();
+    }
+  }, [needsRecommendations, currentSong, addRecommendations]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -128,7 +153,7 @@ export default function App() {
       )}
 
       {/* Toasts */}
-      <div className="fixed bottom-24 right-4 z-[100] space-y-2">
+      <div className="fixed bottom-24 right-4 z-[300] space-y-2">
         <AnimatePresence>
           {toasts.map((toast) => (
             <div
@@ -160,6 +185,37 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+      {/* Global Download Toast */}
+      {activeDownload && (
+        <div className="fixed bottom-24 right-4 z-[110] bg-black/80 backdrop-blur-md rounded-2xl p-4 w-64 shadow-2xl animate-in fade-in slide-in-from-right-4">
+          <div className="flex items-center gap-3 mb-3">
+            {activeDownload.progress === 100 ? (
+              <CheckCircle2 className="h-4 w-4 text-green-400 flex-shrink-0" />
+            ) : (
+              <Download className="h-4 w-4 text-white flex-shrink-0 animate-bounce" />
+            )}
+            <p className="text-white text-sm font-medium truncate">
+              {activeDownload.progress === 100 ? 'Downloaded!' : activeDownload.songName}
+            </p>
+          </div>
+          <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div 
+              className={activeDownload.progress === 100 ? "h-full bg-green-500 rounded-full transition-all duration-300" : "h-full bg-theme-primary rounded-full transition-all duration-300"}
+              style={{ width: `${activeDownload.progress}%` }}
+            />
+          </div>
+          <div className="flex justify-between mt-1.5">
+            <span className="text-white/40 text-xs">
+              {activeDownload.progress === 100 ? 'Saved locally' : 'Downloading...'}
+            </span>
+            <span className="text-white text-xs font-medium">{Math.round(activeDownload.progress)}%</span>
+          </div>
+        </div>
+      )}
+
+      {/* Modals */}
+      {activeModal === 'playlist-picker' && <PlaylistPickerModal />}
+
     </>
   );
 }

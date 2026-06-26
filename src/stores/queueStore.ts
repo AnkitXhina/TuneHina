@@ -15,7 +15,9 @@ interface QueueState {
 
   setQueue: (songs: Song[], startIndex?: number) => void;
   addToQueue: (song: Song) => void;
+  addToQueueMultiple: (songs: Song[]) => void;
   addNext: (song: Song) => void;
+  addNextMultiple: (songs: Song[]) => void;
   removeFromQueue: (index: number) => void;
   reorderQueue: (fromIndex: number, toIndex: number) => void;
   clearQueue: () => void;
@@ -65,6 +67,17 @@ export const useQueueStore = create<QueueState>()(
         });
       },
 
+      addToQueueMultiple: (songs: Song[]) => {
+        const { queue, originalQueue } = get();
+        const existingIds = new Set(queue.map(s => s.id));
+        const newSongs = songs.filter(s => !existingIds.has(s.id));
+        if (newSongs.length === 0) return;
+        set({
+          queue: [...queue, ...newSongs],
+          originalQueue: [...originalQueue, ...newSongs],
+        });
+      },
+
       addNext: (song: Song) => {
         const { queue, currentIndex, originalQueue } = get();
         const newQueue = [...queue];
@@ -72,6 +85,16 @@ export const useQueueStore = create<QueueState>()(
         set({
           queue: newQueue,
           originalQueue: [...originalQueue, song],
+        });
+      },
+
+      addNextMultiple: (songs: Song[]) => {
+        const { queue, currentIndex, originalQueue } = get();
+        const newQueue = [...queue];
+        newQueue.splice(currentIndex + 1, 0, ...songs);
+        set({
+          queue: newQueue,
+          originalQueue: [...originalQueue, ...songs],
         });
       },
 

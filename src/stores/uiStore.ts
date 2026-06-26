@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { generateId } from '../lib/utils';
+import type { Song } from '../types/music';
 
 interface Toast {
   id: string;
@@ -16,6 +17,7 @@ interface UIState {
   isOffline: boolean;
   nowPlayingOpen: boolean;
   activeModal: string | null;
+  playlistTargetSong: Song | Song[] | null;
   toasts: Toast[];
 
   toggleSidebar: () => void;
@@ -26,6 +28,7 @@ interface UIState {
   setNowPlayingOpen: (open: boolean) => void;
   openModal: (id: string) => void;
   closeModal: () => void;
+  setPlaylistPickerSong: (song: Song | Song[] | null) => void;
   addToast: (toast: Omit<Toast, 'id'>) => void;
   removeToast: (id: string) => void;
 }
@@ -39,6 +42,7 @@ export const useUIStore = create<UIState>()(
       isOffline: false,
       nowPlayingOpen: false,
       activeModal: null,
+      playlistTargetSong: null,
       toasts: [],
 
       toggleSidebar: () => set({ sidebarOpen: !get().sidebarOpen }),
@@ -49,6 +53,7 @@ export const useUIStore = create<UIState>()(
       setNowPlayingOpen: (open) => set({ nowPlayingOpen: open }),
       openModal: (id) => set({ activeModal: id }),
       closeModal: () => set({ activeModal: null }),
+      setPlaylistPickerSong: (song) => set({ playlistTargetSong: song }),
 
       addToast: (toast) => {
         const id = generateId();

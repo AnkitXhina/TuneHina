@@ -55,7 +55,20 @@ export default defineConfig({
               },
             },
           },
-
+          {
+            urlPattern: /^https:\/\/aac\.saavncdn\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'audio-cache',
+              expiration: {
+                maxEntries: 12,
+                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200],
+              },
+            },
+          },
           {
             urlPattern: /^https:\/\/shnwazdev-jiosaavn-apii\.vercel\.app\/api\/.*/i,
             handler: 'StaleWhileRevalidate',
