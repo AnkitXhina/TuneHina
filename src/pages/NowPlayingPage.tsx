@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, Pause, SkipBack, SkipForward, Shuffle, Repeat, Repeat1,
   Volume2, VolumeX, ChevronDown, Heart, ListMusic, Mic2, Radio,
-  MoreHorizontal, Disc3, Plus, Maximize2, Minimize2, Download
+  MoreHorizontal, Disc3, Plus, Maximize2, Minimize2, Download, RefreshCw
 } from 'lucide-react';
 import { usePlayerStore } from '../stores/playerStore';
 import { useQueueStore } from '../stores/queueStore';
@@ -20,15 +20,16 @@ import type { LyricsResult } from '../types/lyrics';
 import { getImageUrl, formatTime, cn, getDownloadUrl, getArtistNames } from '../lib/utils';
 import { ArtistLinks } from '../components/ui/ArtistLinks';
 
-type NowPlayingTab = 'upnext' | 'lyrics' | 'related';
+type NowPlayingTab = 'upnext' | 'lyrics' | 'details';
 
 export default function NowPlayingPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<NowPlayingTab>('upnext');
   const [lyrics, setLyrics] = useState<LyricsResult | null>(null);
-  const [lyricsLoading, setLyricsLoading] = useState(false);
+  const [lyricsLoading, setLyricsLoading] = useState(true);
   const [lyricsStatus, setLyricsStatus] = useState('Searching for lyrics...');
-  const [relatedSongs, setRelatedSongs] = useState<Song[]>([]);
+  const [isReloadingLyrics, setIsReloadingLyrics] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [activeLyricIndex, setActiveLyricIndex] = useState(-1);
   const [userPlaylists, setUserPlaylists] = useState<import('../services/db').UserPlaylist[]>([]);
   const [isCreatingPlaylist, setIsCreatingPlaylist] = useState(false);
@@ -81,6 +82,7 @@ export default function NowPlayingPage() {
   const seek = usePlayerStore(s => s.seek);
   const setVolume = usePlayerStore(s => s.setVolume);
   const playSong = usePlayerStore(s => s.playSong);
+  const audioQuality = usePlayerStore(s => s.audioQuality);
 
   const queue = useQueueStore(s => s.queue);
   const currentIndex = useQueueStore(s => s.currentIndex);
@@ -113,29 +115,31 @@ export default function NowPlayingPage() {
     }
   }, [currentSong?.id, extractFromArtwork, addToRecentlyPlayed]);
 
-  useEffect(() => {
+  const fetchLyrics = (forceReload = false) => {
     if (!currentSong) return;
-    setLyricsLoading(true);
-    setLyricsStatus('Searching for lyrics...');
-    setLyrics(null);
+    if (forceReload) {
+      setIsReloadingLyrics(true);
+      lyricsManager.removeCacheEntry(currentSong.id);
+    } else {
+      setLyricsLoading(true);
+    }
+    setLyricsStatus(forceReload ? 'Refetching lyrics...' : 'Searching for lyrics...');
+    if (!forceReload) setLyrics(null);
     lyricsManager.getLyrics(currentSong, setLyricsStatus).then((result) => {
       setLyrics(result);
-      setLyricsLoading(false);
+      if (forceReload) setIsReloadingLyrics(false);
+      else setLyricsLoading(false);
       if (!result) setLyricsStatus('No lyrics found for this song.');
     }).catch(() => {
-      setLyricsLoading(false);
+      if (forceReload) setIsReloadingLyrics(false);
+      else setLyricsLoading(false);
       setLyricsStatus('No lyrics found for this song.');
     });
-  }, [currentSong?.id]);
+  };
 
   useEffect(() => {
-    if (!currentSong) return;
-    const provider = getMusicProvider();
-    provider.getSuggestions(currentSong.id, 15).then((songs) => {
-      setRelatedSongs(songs);
-      if (needsRecommendations && songs.length > 0) addRecommendations(songs);
-    }).catch(() => setRelatedSongs([]));
-  }, [currentSong?.id, needsRecommendations]);
+    fetchLyrics();
+  }, [currentSong?.id]);
 
   useEffect(() => {
     if (!needsRecommendations || !currentSong) return;
@@ -273,11 +277,46 @@ export default function NowPlayingPage() {
     }
   };
 
-  const handlePlayRelated = (song: Song) => {
-    addToQueue(song);
-    playSong(song);
-    const idx = queue.length;
-    useQueueStore.getState().jumpToIndex(idx);
+  const handleDownload = async (song: Song) => {
+    try {
+      useUIStore.getState().addToast({ message: `Downloading ${song.name}...`, type: 'info' });
+      const url = getDownloadUrl(song.downloadUrl, audioQuality);
+      if (!url) {
+        useUIStore.getState().addToast({ message: 'No download URL available', type: 'error' });
+        return;
+      }
+      
+      setDownloadProgress(0);
+      const response = await fetch(url);
+      const contentLength = response.headers.get('Content-Length');
+      const total = contentLength ? parseInt(contentLength) : 0;
+      const reader = response.body!.getReader();
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        if (total) setDownloadProgress(Math.round((received / total) * 100));
+      }
+      
+      const blob = new Blob(chunks);
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${song.name}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      setDownloadProgress(null);
+      useUIStore.getState().addToast({ message: `Downloaded ${song.name}!`, type: 'success' });
+    } catch (e) {
+      console.error('Download failed', e);
+      setDownloadProgress(null);
+      useUIStore.getState().addToast({ message: `Failed to download ${song.name}`, type: 'error' });
+    }
   };
 
   if (!currentSong) {
@@ -338,19 +377,17 @@ export default function NowPlayingPage() {
 
                 <DropdownMenu.Item
                   className="flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 outline-none hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white"
-                  onSelect={() => {
-                    const url = getDownloadUrl(currentSong.downloadUrl, '320kbps');
-                    if (!url) { useUIStore.getState().addToast({ message: 'No download URL available', type: 'error' }); return; }
-                    const artistName = getArtistNames(currentSong.artists);
-                    const fileName = `${currentSong.name} - ${artistName}.m4a`;
-                    const a = document.createElement('a');
-                    a.href = url; a.download = fileName; a.target = '_blank'; a.rel = 'noopener noreferrer';
-                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                    useUIStore.getState().addToast({ message: `Downloading ${currentSong.name}...`, type: 'success' });
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    if (downloadProgress === null) handleDownload(currentSong);
                   }}
                 >
-                  <Download className="h-4 w-4" />
-                  Download
+                  {downloadProgress !== null ? (
+                    <span className="text-xs font-medium w-4 text-center">{downloadProgress}%</span>
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  {downloadProgress !== null ? 'Downloading...' : 'Download'}
                 </DropdownMenu.Item>
 
                 <DropdownMenu.Sub>
@@ -419,10 +456,12 @@ export default function NowPlayingPage() {
                   onSelect={async () => {
                     useUIStore.getState().addToast({ message: 'Starting radio...', type: 'info' });
                     const provider = getMusicProvider();
-                    const songs = await provider.getSuggestions(currentSong.id, 20);
+                    const songs = await provider.getSuggestions(currentSong.id, 50);
                     if (songs.length > 0) {
-                      useQueueStore.getState().setQueue([currentSong, ...songs]);
+                      const shuffled = [...songs].sort(() => Math.random() - 0.5);
+                      useQueueStore.getState().setQueue([currentSong, ...shuffled]);
                       useQueueStore.getState().jumpToIndex(0);
+                      useUIStore.getState().addToast({ message: `Radio started — ${songs.length} songs queued`, type: 'success' });
                     }
                   }}
                 >
@@ -625,20 +664,20 @@ export default function NowPlayingPage() {
         )}>
           {/* Tab Headers */}
           {!isImmersiveMode && (
-            <div className="mb-5 flex gap-8 flex-shrink-0">
+            <div className="mb-5 flex border-b border-white/10 flex-shrink-0">
               {([
                 { key: 'upnext' as const, label: 'UP NEXT' },
                 { key: 'lyrics' as const, label: 'LYRICS' },
-                { key: 'related' as const, label: 'RELATED' },
+                { key: 'details' as const, label: 'DETAILS' },
               ]).map((tab) => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
                   className={cn(
-                    'pb-3 pt-1 text-xs md:text-sm font-bold uppercase tracking-widest transition-all',
+                    'flex-1 border-b-2 py-4 text-center text-sm font-bold uppercase tracking-wider transition-colors',
                     activeTab === tab.key
-                      ? 'border-b-2 border-white text-white'
-                      : 'border-b-2 border-transparent text-white/45 hover:text-white/75',
+                      ? 'border-white text-white'
+                      : 'border-transparent text-white/50 hover:text-white/80'
                   )}
                 >
                   {tab.label}
@@ -742,12 +781,26 @@ export default function NowPlayingPage() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -20 }}
                   className={cn(
-                    'py-8 px-4 md:px-8',
+                    'py-8 px-4 md:px-8 relative',
                     isImmersiveMode ? 'lyrics-immersive space-y-2' : 'space-y-1'
                   )}
                 >
-                  {lyricsLoading ? (
-                    <LyricsLoadingPanel song={currentSong} status={lyricsStatus} />
+                  <button 
+                    onClick={() => fetchLyrics(true)}
+                    disabled={isReloadingLyrics}
+                    className="absolute top-2 right-4 md:right-8 z-10 p-2 text-white/40 hover:text-white/80 transition-colors"
+                    title="Reload Lyrics"
+                  >
+                    <RefreshCw className={cn("h-4 w-4", isReloadingLyrics && "animate-spin")} />
+                  </button>
+
+                  {lyricsLoading && !isReloadingLyrics ? (
+                    <LyricsLoadingPanel 
+                      song={currentSong} 
+                      status={lyricsStatus} 
+                      onRetry={() => fetchLyrics(true)}
+                      isRetrying={isReloadingLyrics}
+                    />
                   ) : lyrics?.synced ? (
                     <div className={cn(isImmersiveMode ? 'space-y-4 pb-64' : 'space-y-1 pb-32')}>
                       {lyrics.synced.lines.map((line, i) => (
@@ -769,48 +822,78 @@ export default function NowPlayingPage() {
                       {lyrics.plain.text}
                     </div>
                   ) : (
-                    <LyricsLoadingPanel song={currentSong} status="No lyrics found for this song." isError={true} />
+                    <LyricsLoadingPanel 
+                      song={currentSong} 
+                      status="No lyrics found for this song." 
+                      isError={true} 
+                      onRetry={() => fetchLyrics(true)}
+                      isRetrying={isReloadingLyrics}
+                    />
                   )}
                 </motion.div>
               )}
 
-              {/* RELATED */}
-              {activeTab === 'related' && (
+              {/* DETAILS */}
+              {activeTab === 'details' && (
                 <motion.div
-                  key="related"
+                  key="details"
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -20 }}
-                  className="space-y-2 pb-20"
+                  className="space-y-0 pb-20"
                 >
-                  {relatedSongs.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-16 text-white/50">
-                      <Radio className="mb-3 h-12 w-12 opacity-50" />
-                      <p className="font-medium">No related songs</p>
+                  <div className="flex justify-between py-3 border-b border-white/5">
+                    <span className="text-white/40 text-sm">Album</span>
+                    <span className="text-white text-sm font-medium hover:underline cursor-pointer" onClick={() => { setNowPlayingOpen(false); navigate(`/album/${currentSong.album.id}`); }}>
+                      {currentSong.album.name}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-3 border-b border-white/5">
+                    <span className="text-white/40 text-sm">Artists</span>
+                    <span className="text-white text-sm font-medium">
+                      <ArtistLinks artists={currentSong.artists} />
+                    </span>
+                  </div>
+                  {currentSong.language && (
+                    <div className="flex justify-between py-3 border-b border-white/5">
+                      <span className="text-white/40 text-sm">Language</span>
+                      <span className="text-white text-sm font-medium capitalize">{currentSong.language}</span>
                     </div>
-                  ) : (
-                    relatedSongs.map((song) => (
-                      <div
-                        key={song.id}
-                        className="flex cursor-pointer items-center gap-4 rounded-xl p-3 transition-all hover:bg-white/10"
-                        onClick={() => handlePlayRelated(song)}
-                      >
-                        <img
-                          src={getImageUrl(song.image, 'low')}
-                          alt={song.name}
-                          className="h-14 w-14 rounded-lg object-cover shadow-md flex-shrink-0"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-base font-bold text-white">{song.name}</p>
-                          <p className="truncate text-sm text-white/55">
-                            <ArtistLinks artists={song.artists} />
-                          </p>
-                        </div>
-                        <span className="text-sm font-medium text-white/35 tabular-nums flex-shrink-0">
-                          {formatTime(song.duration)}
-                        </span>
-                      </div>
-                    ))
+                  )}
+                  {(currentSong.releaseDate || currentSong.year) && (
+                    <div className="flex justify-between py-3 border-b border-white/5">
+                      <span className="text-white/40 text-sm">Released</span>
+                      <span className="text-white text-sm font-medium">{currentSong.releaseDate || currentSong.year}</span>
+                    </div>
+                  )}
+                  {currentSong.label && (
+                    <div className="flex justify-between py-3 border-b border-white/5">
+                      <span className="text-white/40 text-sm">Label</span>
+                      <span className="text-white text-sm font-medium">{currentSong.label}</span>
+                    </div>
+                  )}
+                  {currentSong.playCount && (
+                    <div className="flex justify-between py-3 border-b border-white/5">
+                      <span className="text-white/40 text-sm">Play Count</span>
+                      <span className="text-white text-sm font-medium">{parseInt(currentSong.playCount).toLocaleString()}</span>
+                    </div>
+                  )}
+                  {currentSong.explicitContent && (
+                    <div className="flex justify-between py-3 border-b border-white/5">
+                      <span className="text-white/40 text-sm">Explicit</span>
+                      <span className="text-white text-sm font-medium flex items-center justify-end">
+                        <span className="inline-flex items-center justify-center rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-bold text-white uppercase leading-none">E</span>
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between py-3 border-b border-white/5">
+                    <span className="text-white/40 text-sm">Quality</span>
+                    <span className="text-white text-sm font-medium uppercase">{audioQuality}</span>
+                  </div>
+                  {currentSong.copyright && (
+                    <div className="mt-6 text-center text-xs text-white/30">
+                      {currentSong.copyright}
+                    </div>
                   )}
                 </motion.div>
               )}

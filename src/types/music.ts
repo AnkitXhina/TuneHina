@@ -10,6 +10,7 @@ export interface Song {
   playCount?: string;
   language?: string;
   hasLyrics: boolean;
+  copyright?: string;
   url?: string;
   album: {
     id: string;

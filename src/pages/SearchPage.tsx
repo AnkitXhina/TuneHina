@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search as SearchIcon, X, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -26,9 +26,83 @@ export default function SearchPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
+  const debounceScrollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    setPage(1);
+    setHasMore(true);
+  }, [query]);
+
+  const loadMore = async () => {
+    if (loadingMoreRef.current || activeTab !== 'songs' || !query) return;
+    if (!hasMore) return;
+
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const provider = await import('../providers/music').then(m => m.getMusicProvider());
+      const nextPage = page + 1;
+      
+      const newSongsRaw = await provider.searchSongs(query, nextPage, 20);
+      const newSongs = await Promise.all(
+        newSongsRaw.map(song => provider.getSong(song.id).catch(() => song))
+      );
+      const gotMore = newSongs.length > 0;
+
+      if (!gotMore) {
+        setHasMore(false);
+      } else {
+        useSearchStore.setState(state => {
+          if (!state.results) return state;
+          return {
+            results: {
+              ...state.results,
+              songs: {
+                ...state.results.songs,
+                position: state.results.songs?.position || 0,
+                results: [...(state.results.songs?.results || []), ...newSongs]
+              }
+            }
+          };
+        });
+        setPage(nextPage);
+        if (newSongs.length < 20) setHasMore(false);
+      }
+    } catch (e) {
+      console.error(e);
+      setHasMore(false);
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!sentinelRef.current || loadingMoreRef.current || !query || isSearching || activeTab !== 'songs') return;
+    if (!hasMore) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) {
+        if (debounceScrollRef.current) clearTimeout(debounceScrollRef.current);
+        debounceScrollRef.current = setTimeout(() => {
+          loadMore();
+        }, 300);
+      }
+    }, { root: null, rootMargin: '200px' });
+    observer.observe(sentinelRef.current);
+    return () => {
+      observer.disconnect();
+      if (debounceScrollRef.current) clearTimeout(debounceScrollRef.current);
+    };
+  }, [hasMore, query, isSearching, page, results, activeTab]);
 
   const handleInputChange = useCallback((value: string) => {
     setQuery(value);
@@ -41,12 +115,14 @@ export default function SearchPage() {
   }, [setQuery, search, clearResults]);
 
   const handlePlaySong = (song: Song) => {
-    const songs = results?.songs?.results || [];
-    const idx = songs.findIndex(s => s.id === song.id);
-    if (songs.length > 0) {
-      setQueue(songs, idx >= 0 ? idx : 0);
-    }
     playSong(song);
+    import('../providers/music').then(({ getMusicProvider }) => {
+      getMusicProvider().getSuggestions(song.id, 20).then(suggestions => {
+        if (suggestions.length > 0) {
+          useQueueStore.getState().setQueue([song, ...suggestions], 0);
+        }
+      });
+    });
   };
 
   const tabs = [
@@ -144,7 +220,7 @@ export default function SearchPage() {
             <div className="mb-8">
               {activeTab === 'all' && <h3 className="mb-3 text-lg font-semibold text-white">Songs</h3>}
               <div className="space-y-1">
-                {results.songs.results.slice(0, activeTab === 'all' ? 5 : 50).map((song) => (
+                {results.songs.results.slice(0, activeTab === 'all' ? 5 : undefined).map((song) => (
                   <motion.div
                     key={song.id}
                     whileHover={{ backgroundColor: 'rgba(255,255,255,0.05)' }}
@@ -173,9 +249,9 @@ export default function SearchPage() {
           {(activeTab === 'all' || activeTab === 'albums') && results.albums?.results && results.albums.results.length > 0 && (
             <div className="mb-8">
               {activeTab === 'all' && <h3 className="mb-3 text-lg font-semibold text-white">Albums</h3>}
-              <div className="scroll-section">
-                {results.albums.results.slice(0, 20).map((album) => (
-                  <Link to={`/album/${album.id}`} key={album.id} className="media-card w-40 flex-shrink-0 block lg:w-44">
+              <div className={activeTab === 'all' ? 'scroll-section' : 'grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'}>
+                {results.albums.results.slice(0, activeTab === 'all' ? 24 : undefined).map((album) => (
+                  <Link to={`/album/${album.id}`} key={album.id} className={`media-card block ${activeTab === 'all' ? 'w-40 flex-shrink-0 lg:w-44' : 'w-full'}`}>
                     <div className="media-card-image mb-3">
                       <img
                         src={getImageUrl(album.image, 'medium')}
@@ -195,9 +271,9 @@ export default function SearchPage() {
           {(activeTab === 'all' || activeTab === 'artists') && results.artists?.results && results.artists.results.length > 0 && (
             <div className="mb-8">
               {activeTab === 'all' && <h3 className="mb-3 text-lg font-semibold text-white">Artists</h3>}
-              <div className="scroll-section">
-                {results.artists.results.slice(0, 20).map((artist) => (
-                  <div key={artist.id} className="media-card w-36 flex-shrink-0 text-center lg:w-40">
+              <div className={activeTab === 'all' ? 'scroll-section' : 'grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'}>
+                {results.artists.results.slice(0, activeTab === 'all' ? 20 : undefined).map((artist) => (
+                  <div key={artist.id} className={`media-card text-center ${activeTab === 'all' ? 'w-36 flex-shrink-0 lg:w-40' : 'w-full'}`}>
                     <div className="media-card-image mb-3">
                       <img
                         src={getImageUrl(artist.image, 'medium')}
@@ -220,6 +296,16 @@ export default function SearchPage() {
               <p className="font-medium">No results found</p>
               <p className="text-sm">Try different keywords</p>
             </div>
+          )}
+
+          {/* Sentinel for infinite scroll */}
+          {activeTab === 'songs' && (
+            <>
+              {hasMore && !loadingMore && results.songs?.results?.length ? (
+                <div ref={sentinelRef} className="h-4 w-full" />
+              ) : null}
+              {loadingMore && <div className="text-center text-white/40 py-4 pb-20 text-sm">Loading more...</div>}
+            </>
           )}
         </div>
       )}

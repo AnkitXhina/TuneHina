@@ -3,7 +3,7 @@ import type { LyricsResult } from './lyrics';
 
 export interface MusicProviderInterface {
   name: string;
-  search(query: string): Promise<SearchResult>;
+  search(query: string, page?: number, limit?: number): Promise<SearchResult>;
   searchSongs(query: string, page?: number, limit?: number): Promise<Song[]>;
   searchAlbums(query: string, page?: number, limit?: number): Promise<Album[]>;
   searchArtists(query: string, page?: number, limit?: number): Promise<Artist[]>;

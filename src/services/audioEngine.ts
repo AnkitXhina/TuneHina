@@ -30,7 +30,10 @@ class AudioEngine {
   private listeners: Map<AudioEventType, Set<AudioEventCallback<AudioEventType>>>;
   private _isLoading: boolean = false;
   private _isSeeking: boolean = false;
-  private boundHandlers: Map<string, EventListener> = new Map();
+  private boundHandlers = new Map<string, EventListener>();
+  private rafId: number | null = null;
+  private lastTimeUpdateTs: number = 0;
+  private lastAudioTime: number = 0;
 
   constructor() {
     this.audio = new Audio();
@@ -201,6 +204,43 @@ class AudioEngine {
     }
   }
 
+  private startTimeUpdateLoop = () => {
+    if (this.rafId !== null) return;
+    
+    this.lastTimeUpdateTs = performance.now();
+    this.lastAudioTime = this.audio.currentTime;
+
+    const loop = () => {
+      if (!this.audio.paused && !this._isLoading) {
+        const now = performance.now();
+        const delta = (now - this.lastTimeUpdateTs) / 1000;
+        let interpolated = this.lastAudioTime + (delta * this.audio.playbackRate);
+
+        const actual = this.audio.currentTime;
+        if (Math.abs(interpolated - actual) > 0.25) {
+          interpolated = actual;
+          this.lastTimeUpdateTs = now;
+          this.lastAudioTime = actual;
+        }
+
+        this.emit('timeupdate', {
+          currentTime: Math.max(0, Math.min(interpolated, this.duration || Infinity)),
+          duration: this.duration,
+        });
+      }
+
+      this.rafId = requestAnimationFrame(loop);
+    };
+    this.rafId = requestAnimationFrame(loop);
+  };
+
+  private stopTimeUpdateLoop = () => {
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+  };
+
   // ── Native Event Wiring ─────────────────────────────────────
 
   private setupEventListeners(): void {
@@ -210,21 +250,22 @@ class AudioEngine {
     };
 
     bind('play', () => {
+      this.startTimeUpdateLoop();
       this.emit('play', undefined);
     });
 
     bind('pause', () => {
+      this.stopTimeUpdateLoop();
       this.emit('pause', undefined);
     });
 
     bind('timeupdate', () => {
-      this.emit('timeupdate', {
-        currentTime: this.audio.currentTime,
-        duration: this.duration,
-      });
+      this.lastTimeUpdateTs = performance.now();
+      this.lastAudioTime = this.audio.currentTime;
     });
 
     bind('ended', () => {
+      this.stopTimeUpdateLoop();
       this.emit('ended', undefined);
     });
 
@@ -262,11 +303,18 @@ class AudioEngine {
 
     bind('seeked', () => {
       this._isSeeking = false;
+      this.lastTimeUpdateTs = performance.now();
+      this.lastAudioTime = this.audio.currentTime;
       this.emit('seeked', { currentTime: this.audio.currentTime });
+      this.emit('timeupdate', {
+        currentTime: this.audio.currentTime,
+        duration: this.duration,
+      });
     });
   }
 
   private teardownEventListeners(): void {
+    this.stopTimeUpdateLoop();
     this.boundHandlers.forEach((handler, eventName) => {
       this.audio.removeEventListener(eventName, handler);
     });

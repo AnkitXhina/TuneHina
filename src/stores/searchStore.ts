@@ -34,11 +34,31 @@ export const useSearchStore = create<SearchState>()((set, get) => ({
       return;
     }
 
-    set({ isSearching: true, query });
+    set({ isSearching: true, query, results: null });
 
     try {
       const provider = getMusicProvider();
-      const results = await provider.search(query);
+      // Fetch global search and first 24 albums simultaneously
+      const [results, albums] = await Promise.all([
+        provider.search(query),
+        provider.searchAlbums(query, 1, 24)
+      ]);
+      
+      // Merge full albums back into results
+      if (results) {
+        results.albums = {
+          position: results.albums?.position || 0,
+          results: albums,
+          total: albums.length
+        };
+        
+        if (results.songs?.results) {
+          results.songs.results = await Promise.all(
+            results.songs.results.map(song => provider.getSong(song.id).catch(() => song))
+          );
+        }
+      }
+      
       set({ results, isSearching: false });
       get().addToHistory(query);
     } catch (error) {

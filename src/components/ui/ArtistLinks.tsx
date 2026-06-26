@@ -8,7 +8,11 @@ interface ArtistLinksProps {
 }
 
 export function ArtistLinks({ artists, className = '', onClick }: ArtistLinksProps) {
-  const allArtists = [...artists.primary, ...artists.featured];
+  let allArtists = [...artists.primary, ...artists.featured];
+  
+  if (allArtists.length === 0 && artists.all?.length > 0) {
+    allArtists = artists.all;
+  }
   
   if (allArtists.length === 0) {
     return <span className={className}>Unknown Artist</span>;

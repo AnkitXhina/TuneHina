@@ -162,8 +162,8 @@ export default function HomePage() {
         ]);
         if (recent.status === 'fulfilled') setRecentSongs(recent.value.slice(0, 12));
         if (trending.status === 'fulfilled') {
-          setTrendingSongs(trending.value.songs?.slice(0, 20) ?? []);
-          setTrendingAlbums(trending.value.albums?.slice(0, 20) ?? []);
+          setTrendingSongs(trending.value.songs?.slice(0, 30) ?? []);
+          setTrendingAlbums(trending.value.albums?.slice(0, 24) ?? []);
           setTrendingPlaylists(trending.value.playlists?.slice(0, 20) ?? []);
         }
         if (chartsRes.status === 'fulfilled') setCharts(chartsRes.value.slice(0, 20));

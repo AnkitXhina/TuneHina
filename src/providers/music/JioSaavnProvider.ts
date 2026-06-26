@@ -112,6 +112,7 @@ function normalizeSong(raw: RawData): Song {
     playCount: raw.playCount as string | undefined,
     language: raw.language as string | undefined,
     hasLyrics: Boolean(raw.hasLyrics),
+    copyright: raw.copyright_text as string | undefined,
     url: raw.url as string | undefined,
     album: {
       id: String(raw.album?.id ?? ''),
@@ -139,7 +140,10 @@ function normalizeAlbum(raw: RawData): Album {
     explicitContent: Boolean(raw.explicitContent),
     url: raw.url as string | undefined,
     songCount: raw.songCount != null ? toNumber(raw.songCount) : undefined,
-    artists: normalizeArtists(raw.artists),
+    artists: normalizeArtists(
+      raw.artists ?? raw.primaryArtists, 
+      typeof raw.subtitle === 'string' ? raw.subtitle : undefined
+    ),
     image: normalizeImages(raw.image),
     songs: Array.isArray(raw.songs) ? raw.songs.map(normalizeSong) : undefined,
   };
@@ -218,9 +222,13 @@ class JioSaavnProvider implements MusicProviderInterface {
 
   // ── Search ─────────────────────────────────
 
-  async search(query: string): Promise<SearchResult> {
+  async search(query: string, page: number = 1, limit: number = 20): Promise<SearchResult> {
     try {
-      const data = await this.fetch<RawData>('/api/search', { query });
+      const data = await this.fetch<RawData>('/api/search', { 
+        query, 
+        page: page.toString(), 
+        limit: limit.toString() 
+      });
       return {
         topQuery: data.topQuery
           ? {
@@ -288,7 +296,7 @@ class JioSaavnProvider implements MusicProviderInterface {
     }
   }
 
-  async searchAlbums(query: string, page = 0, limit = 20): Promise<Album[]> {
+  async searchAlbums(query: string, page = 1, limit = 20): Promise<Album[]> {
     try {
       const data = await this.fetch<RawData>('/api/search/albums', {
         query,
@@ -296,6 +304,7 @@ class JioSaavnProvider implements MusicProviderInterface {
         limit: String(limit),
       });
       const results = data.results ?? data;
+      console.log('[searchAlbums] raw response:', results);
       return Array.isArray(results) ? results.map(normalizeAlbum) : [];
     } catch (error) {
       console.error('[JioSaavn] searchAlbums failed:', error);

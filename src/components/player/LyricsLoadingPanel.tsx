@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Disc3 } from 'lucide-react';
+import { Disc3, RefreshCw } from 'lucide-react';
 import type { Song } from '../../types/music';
 import { getImageUrl } from '../../lib/utils';
 import { ArtistLinks } from '../ui/ArtistLinks';
@@ -8,9 +8,11 @@ interface LyricsLoadingPanelProps {
   song: Song;
   status: string;
   isError?: boolean;
+  onRetry?: () => void;
+  isRetrying?: boolean;
 }
 
-export function LyricsLoadingPanel({ song, status, isError }: LyricsLoadingPanelProps) {
+export function LyricsLoadingPanel({ song, status, isError, onRetry, isRetrying }: LyricsLoadingPanelProps) {
   const artworkUrl = getImageUrl(song.image, 'medium');
 
   return (
@@ -32,7 +34,7 @@ export function LyricsLoadingPanel({ song, status, isError }: LyricsLoadingPanel
           </div>
         )}
         
-        {!isError && (
+        {(!isError || isRetrying) && (
           <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/40">
             <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/20 border-t-white" />
           </div>
@@ -48,15 +50,26 @@ export function LyricsLoadingPanel({ song, status, isError }: LyricsLoadingPanel
         <p className="mb-8 text-lg text-gray-400"><ArtistLinks artists={song.artists} /></p>
 
         <AnimatePresence mode="wait">
-          <motion.p
-            key={status}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className={`text-sm font-medium ${isError ? 'text-gray-400' : 'text-theme-primary-light animate-pulse'}`}
-          >
-            {status}
-          </motion.p>
+          <div className="flex items-center justify-center gap-2">
+            <motion.p
+              key={status}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className={`text-sm font-medium ${isError ? 'text-gray-400' : 'text-theme-primary-light animate-pulse'}`}
+            >
+              {status}
+            </motion.p>
+            {isError && onRetry && (
+              <button 
+                onClick={onRetry}
+                disabled={isRetrying}
+                className="p-1.5 text-white/40 hover:text-white/80 transition-colors"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRetrying ? 'animate-spin' : ''}`} />
+              </button>
+            )}
+          </div>
         </AnimatePresence>
       </motion.div>
     </div>
