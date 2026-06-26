@@ -43,7 +43,8 @@ export function MiniPlayer() {
     <motion.div
       initial={{ y: 100 }}
       animate={{ y: 0 }}
-      className="mini-player"
+      className="mini-player backdrop-blur-xl bg-black/40"
+      style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.5))' }}
     >
       {/* Progress bar */}
       <div className="absolute left-0 right-0 top-0 h-0.5" style={{ background: 'rgba(255, 255, 255, 0.15)' }}>

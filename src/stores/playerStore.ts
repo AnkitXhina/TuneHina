@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Song } from '../types/music';
 import { audioEngine } from '../services/audioEngine';
-import { getDownloadUrl } from '../lib/utils';
+import { getDownloadUrl, getImageUrl, getArtistNames } from '../lib/utils';
 import { useQueueStore } from './queueStore';
 
 interface PlayerState {
@@ -86,6 +86,19 @@ export const usePlayerStore = create<PlayerState>()(
           currentTime: startAt,
           duration: fullSong.duration || 0,
         });
+
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: fullSong.name,
+            artist: getArtistNames(fullSong.artists),
+            album: fullSong.album?.name ?? '',
+            artwork: [
+              { src: getImageUrl(fullSong.image, 'low'), sizes: '96x96', type: 'image/jpeg' },
+              { src: getImageUrl(fullSong.image, 'medium'), sizes: '128x128', type: 'image/jpeg' },
+              { src: getImageUrl(fullSong.image, 'high'), sizes: '512x512', type: 'image/jpeg' },
+            ]
+          });
+        }
 
         audioEngine.load(url);
         if (startAt > 0) {
