@@ -17,7 +17,7 @@ import { lyricsManager } from '../providers/lyrics/LyricsManager';
 import { LyricsLoadingPanel } from '../components/player/LyricsLoadingPanel';
 import type { Song } from '../types/music';
 import type { LyricsResult } from '../types/lyrics';
-import { getImageUrl, formatTime, cn, getDownloadUrl, getArtistNames } from '../lib/utils';
+import { getImageUrl, formatTime, cn, getDownloadUrl } from '../lib/utils';
 import { ArtistLinks } from '../components/ui/ArtistLinks';
 
 type NowPlayingTab = 'upnext' | 'lyrics' | 'details';
@@ -291,7 +291,7 @@ export default function NowPlayingPage() {
       const contentLength = response.headers.get('Content-Length');
       const total = contentLength ? parseInt(contentLength) : 0;
       const reader = response.body!.getReader();
-      const chunks: Uint8Array[] = [];
+      const chunks: Uint8Array<ArrayBuffer>[] = [];
       let received = 0;
       
       while (true) {

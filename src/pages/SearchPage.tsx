@@ -22,7 +22,6 @@ export default function SearchPage() {
   const clearHistory = useSearchStore(s => s.clearHistory);
 
   const playSong = usePlayerStore(s => s.playSong);
-  const setQueue = useQueueStore(s => s.setQueue);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
