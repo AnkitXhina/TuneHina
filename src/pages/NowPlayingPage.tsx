@@ -40,7 +40,7 @@ export default function NowPlayingPage() {
   
   const progressBarRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
-  const prevVolumeRef = useRef<number>(0.8);
+  const lyricsTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const [tooltipLeft, setTooltipLeft] = useState<number | null>(null);
   const [tooltipTime, setTooltipTime] = useState('');
 
@@ -78,9 +78,9 @@ export default function NowPlayingPage() {
   const currentTime = usePlayerStore(s => s.currentTime);
   const duration = usePlayerStore(s => s.duration);
   const volume = usePlayerStore(s => s.volume);
+  const toggleMute = usePlayerStore(s => s.toggleMute);
   const togglePlay = usePlayerStore(s => s.togglePlay);
   const seek = usePlayerStore(s => s.seek);
-  const setVolume = usePlayerStore(s => s.setVolume);
   const playSong = usePlayerStore(s => s.playSong);
   const audioQuality = usePlayerStore(s => s.audioQuality);
 
@@ -115,25 +115,63 @@ export default function NowPlayingPage() {
     }
   }, [currentSong?.id, extractFromArtwork, addToRecentlyPlayed]);
 
+  useEffect(() => {
+    return () => clearTimeout(lyricsTimerRef.current);
+  }, []);
+
   const fetchLyrics = (forceReload = false) => {
     if (!currentSong) return;
+    
+    // Capture the exact song ID this fetch is for to prevent stale closure race conditions
+    const songId = currentSong.id;
+    
     if (forceReload) {
       setIsReloadingLyrics(true);
-      lyricsManager.removeCacheEntry(currentSong.id);
+      lyricsManager.removeCacheEntry(songId);
     } else {
       setLyricsLoading(true);
     }
-    setLyricsStatus(forceReload ? 'Refetching lyrics...' : 'Searching for lyrics...');
-    if (!forceReload) setLyrics(null);
-    lyricsManager.getLyrics(currentSong, setLyricsStatus).then((result) => {
-      setLyrics(result);
-      if (forceReload) setIsReloadingLyrics(false);
-      else setLyricsLoading(false);
-      if (!result) setLyricsStatus('No lyrics found for this song.');
+    
+    setLyrics(null);
+    
+    // Safe status updater that dies if the song changes
+    const updateStatus = (status: string) => {
+      if (usePlayerStore.getState().currentSong?.id === songId) {
+        setLyricsStatus(status);
+      }
+    };
+    
+    updateStatus(forceReload ? 'Refetching lyrics...' : 'Searching for lyrics...');
+    clearTimeout(lyricsTimerRef.current);
+
+    lyricsManager.getLyrics(currentSong, updateStatus).then((result) => {
+      // If the user skipped to another song while this request was pending, ignore this result entirely!
+      if (usePlayerStore.getState().currentSong?.id !== songId) return;
+
+      if (result) {
+        setLyrics(result);
+        if (forceReload) setIsReloadingLyrics(false);
+        else setLyricsLoading(false);
+        clearTimeout(lyricsTimerRef.current);
+      } else {
+        lyricsTimerRef.current = setTimeout(() => {
+          if (usePlayerStore.getState().currentSong?.id === songId) {
+            updateStatus('No lyrics found for this song.');
+            if (forceReload) setIsReloadingLyrics(false);
+            else setLyricsLoading(false);
+          }
+        }, 9000);
+      }
     }).catch(() => {
-      if (forceReload) setIsReloadingLyrics(false);
-      else setLyricsLoading(false);
-      setLyricsStatus('No lyrics found for this song.');
+      if (usePlayerStore.getState().currentSong?.id !== songId) return;
+      
+      lyricsTimerRef.current = setTimeout(() => {
+        if (usePlayerStore.getState().currentSong?.id === songId) {
+          updateStatus('No lyrics found for this song.');
+          if (forceReload) setIsReloadingLyrics(false);
+          else setLyricsLoading(false);
+        }
+      }, 9000);
     });
   };
 
@@ -332,7 +370,11 @@ export default function NowPlayingPage() {
   const displayQueue = queue;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-black/10 backdrop-blur-[80px] transition-colors duration-1000">
+    <div 
+      className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-black/10 backdrop-blur-[80px] transition-colors duration-1000"
+      tabIndex={-1}
+      onClick={() => (document.activeElement as HTMLElement)?.blur()}
+    >
 
       {/* ── Header ── */}
       <div className="relative z-10 flex items-center justify-between px-6 pt-5 pb-3">
@@ -637,14 +679,7 @@ export default function NowPlayingPage() {
                   </button>
                   <div className="relative hidden sm:flex items-center pl-3">
                     <button
-                      onClick={() => {
-                        if (volume > 0) {
-                          prevVolumeRef.current = volume;
-                          setVolume(0);
-                        } else {
-                          setVolume(prevVolumeRef.current || 0.8);
-                        }
-                      }}
+                      onClick={toggleMute}
                       className="icon-btn"
                       aria-label="Volume"
                     >

@@ -60,7 +60,6 @@ export const useSearchStore = create<SearchState>()((set, get) => ({
       }
       
       set({ results, isSearching: false });
-      get().addToHistory(query);
     } catch (error) {
       console.error('[Search] failed:', error);
       set({ isSearching: false });

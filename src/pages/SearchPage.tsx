@@ -20,6 +20,13 @@ export default function SearchPage() {
   const clearResults = useSearchStore(s => s.clearResults);
   const setActiveTab = useSearchStore(s => s.setActiveTab);
   const clearHistory = useSearchStore(s => s.clearHistory);
+  const addToHistory = useSearchStore(s => s.addToHistory);
+
+  const handleCommitSearch = () => {
+    if (query.trim().length > 2) {
+      addToHistory(query.trim());
+    }
+  };
 
   const playSong = usePlayerStore(s => s.playSong);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -114,6 +121,7 @@ export default function SearchPage() {
   }, [setQuery, search, clearResults]);
 
   const handlePlaySong = (song: Song) => {
+    handleCommitSearch();
     playSong(song);
     import('../providers/music').then(({ getMusicProvider }) => {
       getMusicProvider().getSuggestions(song.id, 20).then(suggestions => {
@@ -143,6 +151,12 @@ export default function SearchPage() {
             type="text"
             value={query}
             onChange={(e) => handleInputChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleCommitSearch();
+                inputRef.current?.blur();
+              }
+            }}
             placeholder="Search songs, albums, artists..."
             className="w-full rounded-xl border border-white/20 bg-white/10 py-3.5 pl-12 pr-10 text-white placeholder:text-white/50 outline-none transition-all focus:border-white/30 focus:bg-white/20"
           />
@@ -250,7 +264,7 @@ export default function SearchPage() {
               {activeTab === 'all' && <h3 className="mb-3 text-lg font-semibold text-white">Albums</h3>}
               <div className={activeTab === 'all' ? 'scroll-section' : 'grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'}>
                 {results.albums.results.slice(0, activeTab === 'all' ? 24 : undefined).map((album) => (
-                  <Link to={`/album/${album.id}`} key={album.id} className={`media-card block ${activeTab === 'all' ? 'w-40 flex-shrink-0 lg:w-44' : 'w-full'}`}>
+                  <Link to={`/album/${album.id}`} key={album.id} onClick={handleCommitSearch} className={`media-card block ${activeTab === 'all' ? 'w-40 flex-shrink-0 lg:w-44' : 'w-full'}`}>
                     <div className="media-card-image mb-3">
                       <img
                         src={getImageUrl(album.image, 'medium')}
@@ -272,7 +286,7 @@ export default function SearchPage() {
               {activeTab === 'all' && <h3 className="mb-3 text-lg font-semibold text-white">Artists</h3>}
               <div className={activeTab === 'all' ? 'scroll-section' : 'grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'}>
                 {results.artists.results.slice(0, activeTab === 'all' ? 20 : undefined).map((artist) => (
-                  <div key={artist.id} className={`media-card text-center ${activeTab === 'all' ? 'w-36 flex-shrink-0 lg:w-40' : 'w-full'}`}>
+                  <div key={artist.id} onClick={handleCommitSearch} className={`media-card text-center ${activeTab === 'all' ? 'w-36 flex-shrink-0 lg:w-40' : 'w-full'}`}>
                     <div className="media-card-image mb-3">
                       <img
                         src={getImageUrl(artist.image, 'medium')}

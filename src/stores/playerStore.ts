@@ -11,6 +11,7 @@ interface PlayerState {
   currentTime: number;
   duration: number;
   volume: number;
+  prevVolume: number;
   playbackRate: number;
   audioQuality: string;
   normalizeVolume: boolean;
@@ -22,6 +23,7 @@ interface PlayerState {
   play: () => void;
   pause: () => void;
   togglePlay: () => void;
+  toggleMute: () => void;
   seek: (time: number) => void;
   setVolume: (volume: number) => void;
   setPlaybackRate: (rate: number) => void;
@@ -43,6 +45,7 @@ export const usePlayerStore = create<PlayerState>()(
       currentTime: 0,
       duration: 0,
       volume: 0.8,
+      prevVolume: 0.8,
       playbackRate: 1,
       audioQuality: '320kbps',
       normalizeVolume: true,
@@ -137,6 +140,16 @@ export const usePlayerStore = create<PlayerState>()(
         }
       },
 
+      toggleMute: () => {
+        const { volume, prevVolume } = get();
+        if (volume > 0) {
+          set({ prevVolume: volume });
+          get().setVolume(0);
+        } else {
+          get().setVolume(prevVolume || 0.8);
+        }
+      },
+
       seek: (time: number) => {
         audioEngine.seek(time);
         set({ currentTime: time });
@@ -200,6 +213,24 @@ export const usePlayerStore = create<PlayerState>()(
 
         // Restore volume
         audioEngine.setVolume(get().volume);
+
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.setActionHandler('previoustrack', () => {
+            const prev = useQueueStore.getState().playPrevious();
+            if (prev) get().playSong(prev);
+          });
+
+          navigator.mediaSession.setActionHandler('nexttrack', () => {
+            const next = useQueueStore.getState().playNext();
+            if (next) get().playSong(next);
+          });
+
+          navigator.mediaSession.setActionHandler('seekto', (details) => {
+            if (details.seekTime !== undefined) {
+              get().seek(details.seekTime);
+            }
+          });
+        }
 
         return () => {
           audioEngine.off('play', onPlay);
